@@ -1,0 +1,42 @@
+model:
+  
+  model_name: 
+    _target_: jigsaw.jigsaw.Jigsaw3D
+
+  encoder_weights_path: "encoder_ckpts/train_vq_all_normalize_pc/last.ckpt"
+  ref_part: False
+  scheduler: "ddpm"
+
+  cd_loss: False
+  reset_timestep: -1
+  weighted_small_pieces: False
+
+  num_dim: 64
+  num_point: 25
+
+  type: "avg_pool"
+  embedding_type: mlp
+  out_channels: 3
+  std: 1
+  multires: 10
+  embed_dim: 256
+  num_layers: 6
+  num_heads: 4
+  dropout_rate: 0.1
+  DDPM_TRAIN_STEPS: 1000
+  DDPM_BETA_SCHEDULE: "linear"
+  timestep_spacing: "leading"
+
+  PREDICT_TYPE: 'epsilon'
+  BETA_START: 0.0001
+  BETA_END: 0.02
+  condition_latent: True
+  condition_position: True
+  position_encoding: True
+
+  num_inference_steps: 100
+
+  lr_scheduler:
+    _target_: torch.optim.lr_scheduler.MultiStepLR
+    milestones: [1200, 1700]
+    gamma: 0.05

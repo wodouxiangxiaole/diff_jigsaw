@@ -1,0 +1,7 @@
+ae_name:
+  _target_: vq_jigsaw.model.modules.pn2.PN2
+
+
+num_point: 25
+num_dim: 64
+local_decode_pts: 40
