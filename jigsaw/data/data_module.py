@@ -4,6 +4,8 @@ from importlib import import_module
 from torch.utils.data import DataLoader
 from jigsaw.dataset.dataset import build_geometry_dataloader
 from jigsaw.dataset.dataset import build_test_dataloader
+from torch.utils.data import DataLoader, Subset
+
 
 class DataModule(pl.LightningDataModule):
     def __init__(self, cfg):
@@ -17,7 +19,7 @@ class DataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return self.test_data
-        
+    
     # Make the val data to the test data    
     def test_dataloader(self):
         return self.test_data

@@ -1,5 +1,5 @@
 ae_name:
-  _target_: vq_jigsaw.model.modules.vq_vae.VQVAE
+  _target_: jigsaw.model.modules.vq_vae.VQVAE
   
 n_embeddings: 1024
 embedding_dim: 16

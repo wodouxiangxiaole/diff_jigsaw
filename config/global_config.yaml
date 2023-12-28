@@ -36,7 +36,7 @@ inference_dir: null
 trainer:
   accelerator: gpu
   max_epochs: 2000
-  num_sanity_val_steps: 0
+  num_sanity_val_steps: 1
   check_val_every_n_epoch: 100
   profiler: simple
   precision: 32

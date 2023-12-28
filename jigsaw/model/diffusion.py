@@ -43,7 +43,7 @@ class DiffModel(nn.Module):
         multires = 10
         embed_kwargs = {
             'include_input': True,
-            'input_dims': 3,
+            'input_dims': 7,
             'max_freq_log2': multires - 1,
             'num_freqs': multires,
             'log_sampling': True,
@@ -83,7 +83,7 @@ class DiffModel(nn.Module):
 
         self.param_fc = nn.Linear(embedder_obj.out_dim, self.model_channels)
         self.pos_fc = nn.Linear(
-            embedder_obj.out_dim + embedder_scale.out_dim, 
+            embedder_pos.out_dim + embedder_scale.out_dim, 
             self.model_channels
         )
 
@@ -94,8 +94,6 @@ class DiffModel(nn.Module):
         self.output_linear2 = nn.Linear(self.model_channels, self.model_channels // 2)
         self.output_linear3 = nn.Linear(self.model_channels // 2, self.out_channels)
 
-        # self.scale_fc = nn.Linear(embedder_scale.out_dim, self.model_channels)
-        # self.out = nn.Linear(self.model_channels, self.out_channels)
 
 
     def _gen_mask(self, L, N, B, mask):
@@ -113,7 +111,7 @@ class DiffModel(nn.Module):
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         time_emb = time_emb.unsqueeze(1)
 
-        x = x.flatten(0, 1)  # (B*N, 3)
+        x = x.flatten(0, 1)  # (B*N, 7)
 
         xyz = xyz.flatten(0, 1)  # (B*N, L, 3)
 
@@ -145,20 +143,7 @@ class DiffModel(nn.Module):
         return out_dec
 
 
-    def _add_ref_part_emb(self, B, x_emb, ref_part):
-        """
-        x_emb: B, N, 256
-        ref_part_valids: B, N
-        """
-        x_emb = x_emb.reshape(B, -1, self.model_channels)
-        ref_part_emb = self.ref_part_emb.weight[0].repeat(B, x_emb.shape[1], 1)
-        ref_part_emb[torch.arange(B), ref_part] = self.ref_part_emb.weight[1]
-
-        x_emb = x_emb + ref_part_emb
-        return x_emb.reshape(-1, self.model_channels)
-
-
-    def forward(self, x, timesteps, latent, xyz, part_valids, scale, ref_part):
+    def forward(self, x, timesteps, latent, xyz, part_valids, scale):
         """
         Latent already transform
 
@@ -175,9 +160,6 @@ class DiffModel(nn.Module):
 
         x_emb, shape_emb, pos_emb, time_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
         self_mask, gen_mask = self._gen_mask(L, N, B, part_valids)
-
-        if self.cfg.model.ref_part:
-            x_emb = self._add_ref_part_emb(B, x_emb, ref_part)
 
         x_emb = x_emb.reshape(B, N, 1, -1)
         x_emb = x_emb.repeat(1, 1, L, 1)

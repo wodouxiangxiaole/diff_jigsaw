@@ -22,12 +22,43 @@ class VQVAE(nn.Module):
         )
 
 
-    def encode(self, data_dict):
+    def forward(self, part_pcs, verbose=False):
+        """
+        part_pcs = (batch, L, C)
+
+        x.shape = (batch, C, L)
+        """
+        x = part_pcs.permute(0, 2, 1)
+
+        z_e, xyz = self.encoder(x)
+
+        B, L, C = z_e.shape
+
+        embedding_loss, z_q, perplexity, _, _ = self.vector_quantization(
+            z_e.reshape(B, 4 * L, -1)
+        )
+
+        z_q = z_q.reshape(B, L, -1)
+
+        x_hat = self.decoder(z_q)
+
+        output_dict = {
+            'embedding_loss': embedding_loss,
+            'pc_offset': x_hat,
+            'perplexity': perplexity,
+            "xyz": xyz,
+            "z_q": z_q
+        }
+
+        return output_dict
+    
+
+    def encode(self, part_pcs):
         """
         x.shape = (batch, C, L)
         """
 
-        x = data_dict["part_pcs"].permute(0, 2, 1)
+        x = part_pcs.permute(0, 2, 1)
         z_e, xyz = self.encoder(x)
         
         B, L, C = z_e.shape

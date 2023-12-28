@@ -34,13 +34,7 @@ class GeometryLatentDataset(Dataset):
         self.max_num_part = 20
 
         if overfit != -1:
-            self.data_files = self.data_files[:overfit] * 400
-
-            if data_fn == "train":
-                self.data_files = self.data_files 
-
-        if data_fn == "val":
-            self.data_files = self.data_files[:512]
+            self.data_files = self.data_files[:overfit] * 40
 
         self.data_list = []
 
@@ -55,34 +49,20 @@ class GeometryLatentDataset(Dataset):
             mesh_file_path = data_dict['mesh_file_path'].item()
             part_pcs = data_dict['part_pcs']
             scale = data_dict['scale']
-
-            if cfg.data.ignore_small_scale:
-                for i in range(scale.shape[0]):
-                    if(scale[i] < 0.03):
-                        part_valids[i] = 0
-
-            if cfg.model.ref_part:
-                # make every ref part gt translation to 0
-                # every part translation is relative to ref part
-                # lead to less ambiguity 
-                ref_part = np.argmax(scale[:num_parts])
-                # ref_gt_translation = part_trans[ref_part]
-                # for i in range(num_parts):
-                #     part_trans[i] = part_trans[i] - ref_gt_translation
-            else:
-                ref_part = -1
+            part_rots = data_dict["gt_quats"]
 
             sample = {
                 'latent': latent,
                 'data_id': data_id,
                 'part_valids': part_valids,
                 'part_trans': part_trans,
+                'part_r'
                 'xyz': xyz,
                 'mesh_file_path': mesh_file_path,
                 'num_parts': num_parts,
                 'part_pcs': part_pcs,
                 'part_scale': scale,
-                'ref_part': ref_part
+                'part_rots': part_rots,
             }
 
             self.data_list.append(sample)

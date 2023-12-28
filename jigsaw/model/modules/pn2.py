@@ -19,11 +19,11 @@ class PN2(nn.Module):
         
         self.conv6 = nn.Conv1d(in_channels=512, out_channels=self.num_dim, kernel_size=1)
         
-        # self.fc1 = nn.Linear(self.num_dim, 256)
-        # self.bn1 = nn.BatchNorm1d(256)
-        # self.fc2 = nn.Linear(256, 512)
-        # self.bn2 = nn.BatchNorm1d(512)
-        # self.fc3 = nn.Linear(512, self.local_decode_pts*3)
+        self.fc1 = nn.Linear(self.num_dim, 256)
+        self.bn1 = nn.BatchNorm1d(256)
+        self.fc2 = nn.Linear(256, 512)
+        self.bn2 = nn.BatchNorm1d(512)
+        self.fc3 = nn.Linear(512, self.local_decode_pts*3)
 
         # self.loss_func = ChamferDistance()
 

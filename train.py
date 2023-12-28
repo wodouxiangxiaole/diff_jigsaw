@@ -4,10 +4,6 @@ import hydra
 import lightning.pytorch as pl
 from jigsaw.data.data_module import DataModule
 from lightning.pytorch.callbacks import LearningRateMonitor
-# from lightning.pytorch.profilers import AdvancedProfiler
-# from lightning.pytorch.callbacks import Callback
-# from jigsaw.dataset.dataset import build_geometry_dataloader
-# from lightning.pytorch.strategies import DDPStrategy
 
 
 def init_callbacks(cfg):
@@ -33,7 +29,9 @@ def main(cfg):
 
     if cfg.model.encoder_weights_path is not None:
         encoder_weights = torch.load(cfg.model.encoder_weights_path)['state_dict']
-        model.encoder.load_state_dict({k.replace('module.', ''): v for k, v in encoder_weights.items()})
+        model.encoder.load_state_dict({k.replace('ae.', ''): v for k, v in encoder_weights.items()})
+        # for param in model.encoder.parameters():
+        #     param.requires_grad = False
 
     # initialize logger
     logger = hydra.utils.instantiate(cfg.logger)

@@ -11,7 +11,7 @@ from jigsaw.evaluation.jigsaw_evaluator import (
     calc_part_acc,
     trans_metrics,
     randn_tensor,
-    calc_cd
+    rot_metrics,
 )
 import numpy as np
 import os
@@ -59,6 +59,8 @@ class Jigsaw3D(pl.LightningModule):
         else:
             raise NotImplementedError
 
+        self.encoder = hydra.utils.instantiate(cfg.ae.ae_name, cfg)
+
         self.cd_loss = ChamferDistance()
         self.num_points = cfg.model.num_point
         self.num_channels = cfg.model.num_dim
@@ -67,9 +69,9 @@ class Jigsaw3D(pl.LightningModule):
             num_inference_steps=cfg.model.num_inference_steps
         )
 
-        self.acc_list = []
+        self.rmse_r_list = []
         self.rmse_t_list = []
-        self.cd_list = []
+        self.acc_list = []
 
         self.metric = ChamferDistance()
 
@@ -87,27 +89,42 @@ class Jigsaw3D(pl.LightningModule):
 
     def forward(self, data_dict):
         gt_trans = data_dict['part_trans']
-        latent = data_dict['latent']
-        xyz = data_dict["xyz"]
-        ref_part = data_dict["ref_part"]
+        gt_rots = data_dict['part_rots']
+        gt_rots_trans = torch.cat([gt_trans, gt_rots], dim=-1)
 
-        noise = torch.randn(gt_trans.shape, device=self.device)
+        noise = torch.randn(gt_rots_trans.shape, device=self.device)
 
-        B, P, _, _ = latent.shape
+        B, P, N, C = data_dict["part_pcs"].shape
 
         timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (B,),
                                   device=self.device).long()
         
-        noisy_trans = self.noise_scheduler.add_noise(gt_trans, noise, timesteps)
-        if self.cfg.model.ref_part:
-            noisy_trans[torch.arange(B), ref_part] = gt_trans[torch.arange(B), ref_part]
+        noisy_trans_and_rots = self.noise_scheduler.add_noise(gt_rots_trans, noise, timesteps)
 
 
-        pred_noise = self.diffusion(noisy_trans, timesteps, 
-                                    latent, xyz, 
-                                    data_dict['part_valids'],
-                                    data_dict["part_scale"],
-                                    ref_part)
+        part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+        part_pcs = part_pcs[data_dict['part_valids'].bool()]
+
+        encoder_out = self.encoder.encode(part_pcs)
+
+        latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
+        xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
+
+        latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
+        xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
+
+
+        # latent = encoder_out["z_q"].reshape(B, P, self.num_points, self.num_channels)
+        # xyz = encoder_out["xyz"].reshape(B, P, self.num_points, 3)
+
+        pred_noise = self.diffusion(
+            noisy_trans_and_rots, 
+            timesteps, 
+            latent, 
+            xyz, 
+            data_dict['part_valids'],
+            data_dict["part_scale"],
+        )
 
         output_dict = {
             'pred_noise': pred_noise,
@@ -148,99 +165,89 @@ class Jigsaw3D(pl.LightningModule):
         return total_loss
     
 
-    def on_after_backward(self):
-        """Called after the backward pass but before the optimizer step."""
-        for name, param in self.named_parameters():
-            if param.grad is None:
-                print(f"Parameter not used in forward pass: {name}")
+    # def on_after_backward(self):
+    #     """Called after the backward pass but before the optimizer step."""
+    #     for name, param in self.named_parameters():
+    #         if param.grad is None:
+    #             print(f"Parameter not used in forward pass: {name}")
 
                 
     def validation_step(self, data_dict, idx):
-        output_dict = self(data_dict)
-        loss_dict = self._loss(data_dict, output_dict)
-        # calculate the total loss and log
-        total_loss = 0
-        for loss_name, loss_value in loss_dict.items():
-            total_loss += loss_value
-            self.log(f"val_loss/{loss_name}", loss_value, on_step=True, on_epoch=False)
-        self.log(f"val_loss/total_loss", total_loss, on_step=True, on_epoch=False)
-        
-        latent = data_dict['latent']
-        xyz = data_dict["xyz"]
-
         gt_trans = data_dict['part_trans']
-        noise_trans = randn_tensor(gt_trans.shape, device=self.device)
+        gt_rots = data_dict['part_rots']
+        gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
+        noisy_trans_and_rots = randn_tensor(gt_trans_and_rots.shape, device=self.device)
 
-        ref_part = data_dict["ref_part"]
-        B, P, _, _ = latent.shape
+        B, P, N, C = data_dict["part_pcs"].shape
 
-        all_pred_translation = []
+        all_pred_trans_rots = []
 
         for t in tqdm(self.noise_scheduler.timesteps):
-            timesteps = t.reshape(-1).repeat(len(noise_trans)).cuda()
-            
+            timesteps = t.reshape(-1).repeat(len(noisy_trans_and_rots)).cuda()
+
             if t == self.cfg.model.reset_timestep:
-                noise_trans = randn_tensor(gt_trans.shape, device=self.device)
+                noisy_trans_and_rots = randn_tensor(gt_trans.shape, device=self.device)
 
-            pred_noise = self.diffusion(noise_trans, timesteps, 
-                                        latent, xyz, 
-                                        data_dict["part_valids"],
-                                        data_dict["part_scale"],
-                                        ref_part)
-            
-            vNext = self.noise_scheduler.step(pred_noise, t, noise_trans).prev_sample
-            noise_trans = vNext
 
-            if self.cfg.model.ref_part:
-                noise_trans[torch.arange(B), ref_part] = gt_trans[torch.arange(B), ref_part]        
+            part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+            part_pcs = part_pcs[data_dict['part_valids'].bool()]
 
-            all_pred_translation.append(noise_trans.detach().cpu().numpy())
+            encoder_out = self.encoder.encode(part_pcs)
+
+            latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
+            xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
+
+            latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
+            xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
+
+
+            pred_noise = self.diffusion(
+                noisy_trans_and_rots, 
+                timesteps, 
+                latent,
+                xyz, 
+                data_dict["part_valids"],
+                data_dict["part_scale"],
+            )
+        
+            vNext = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
+            noisy_trans_and_rots = vNext    
+
+            all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
 
         pts = data_dict['part_pcs']
-        pred_translation = noise_trans[..., :3]
+        pred_translation = noisy_trans_and_rots[..., :3]
+        pred_rots = noisy_trans_and_rots[..., 3:]
 
-        part_valids = data_dict['part_valids']
-
-        # for i in range(B):
-        #     scale = part_valids[i]
-        #     for j in range(scale.shape[0]):
-        #         if scale[j] < 0.03:
-        #             part_valids[i][j] = 0
-
-        acc = calc_part_acc(pts, trans1=pred_translation, trans2=gt_trans, 
-                            valids=part_valids, 
+        acc = calc_part_acc(pts, trans1=pred_translation, trans2=gt_trans,
+                            rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
                             chamfer_distance=self.metric)
 
-        rmse_t = trans_metrics(pred_translation, gt_trans,  part_valids, 'rmse')
-
-        cd = calc_cd(
-            pts, pred_translation, gt_trans,
-            part_valids, 
-            self.metric
-        )
+        rmse_r = rot_metrics(pred_rots, gt_rots, data_dict['part_valids'], 'rmse')
+        rmse_t = trans_metrics(pred_translation, gt_trans,  data_dict['part_valids'], 'rmse')
 
         self.acc_list.append(torch.mean(acc))
+        self.rmse_r_list.append(torch.mean(rmse_r))
         self.rmse_t_list.append(torch.mean(rmse_t))
-        self.cd_list.append(torch.mean(cd))
 
-        return np.stack(all_pred_translation, axis=0), acc, rmse_t, cd
+        return np.stack(all_pred_trans_rots, axis=0), acc
     
 
     def on_validation_epoch_end(self):
         total_acc = torch.mean(torch.stack(self.acc_list))
         total_rmse_t = torch.mean(torch.stack(self.rmse_t_list))
-        total_cd = torch.mean(torch.stack(self.cd_list))
+        total_rmse_r = torch.mean(torch.stack(self.rmse_r_list))
         self.log(f"eval/part_acc", total_acc)
         self.log(f"eval/rmse_t", total_rmse_t)
-        self.log(f"eval/cd", total_cd)
+        self.log(f"eval/rmse_r", total_rmse_r)
         self.acc_list = []
         self.rmse_t_list = []
         self.cd_list = []
-        return total_acc, total_rmse_t, total_cd
+        return total_acc, total_rmse_t, total_rmse_r
 
 
     def test_step(self, data_dict, idx):
-        predict_translation, acc, _, _ = self.validation_step(data_dict, idx)
+        predict_translation, acc = self.validation_step(data_dict, idx)
 
         T, B, _, _ = predict_translation.shape
 
@@ -267,7 +274,7 @@ class Jigsaw3D(pl.LightningModule):
 
 
     def on_test_epoch_end(self):
-        total_acc, total_rmse_t, total_cd  = self.on_validation_epoch_end()
+        total_acc, total_rmse_t  = self.on_validation_epoch_end()
         # self.print("--------------Metrics on Test Set--------------")
         # self.print("test/part_acc", total_acc)
         # self.print("test/rmse_t", total_rmse_t)

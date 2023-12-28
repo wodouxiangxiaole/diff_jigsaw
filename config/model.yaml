@@ -16,7 +16,7 @@ model:
 
   type: "avg_pool"
   embedding_type: mlp
-  out_channels: 3
+  out_channels: 7
   std: 1
   multires: 10
   embed_dim: 256
@@ -30,10 +30,6 @@ model:
   PREDICT_TYPE: 'epsilon'
   BETA_START: 0.0001
   BETA_END: 0.02
-  condition_latent: True
-  condition_position: True
-  position_encoding: True
-
   num_inference_steps: 100
 
   lr_scheduler:
