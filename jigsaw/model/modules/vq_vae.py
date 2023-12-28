@@ -20,6 +20,7 @@ class VQVAE(nn.Module):
             cfg.ae.embedding_dim,
             cfg.ae.beta
         )
+        self.decoder = self.pn2.decode
 
 
     def forward(self, part_pcs, verbose=False):
@@ -72,3 +73,7 @@ class VQVAE(nn.Module):
         }
 
         return output_dict
+    
+    def decode(self, z_q):
+        x_hat = self.decoder(z_q)
+        return x_hat    

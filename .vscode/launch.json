@@ -16,6 +16,23 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": true
-        }
+        },
+
+        {
+            "name": "test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/test.py",
+            "args": [
+                "experiment_name=train_all_bs24_4gpu",
+                "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
+                "inference_dir=inference_steps_1000",
+                "ckpt_path=output/train_all_bs24_4gpu/training/last.ckpt",
+                "model.num_inference_steps=1000",
+                "data.val_batch_size=10",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
     ]
 }

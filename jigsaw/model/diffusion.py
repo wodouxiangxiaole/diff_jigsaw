@@ -11,8 +11,8 @@ from jigsaw.model.transformer import EncoderLayer
 
 class DiffModel(nn.Module):
     """
-  Transformer-based diffusion model
-  """
+    Transformer-based diffusion model
+    """
 
     def __init__(self, cfg):
         super(DiffModel, self).__init__()
@@ -22,9 +22,6 @@ class DiffModel(nn.Module):
         self.out_channels = cfg.model.out_channels
         self.num_layers = cfg.model.num_layers
         self.num_heads = cfg.model.num_heads
-
-        if cfg.model.ref_part:
-            self.ref_part_emb = nn.Embedding(2, cfg.model.embed_dim)
 
         self.activation = nn.SiLU()
         self.transformer_layers = nn.ModuleList(

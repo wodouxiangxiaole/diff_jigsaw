@@ -1,6 +1,7 @@
 encoder_ckpts/
 flake8/
 output/
+xgutils/
 
 __pycache__
 *.ipynb

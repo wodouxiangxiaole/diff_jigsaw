@@ -247,9 +247,9 @@ class Jigsaw3D(pl.LightningModule):
 
 
     def test_step(self, data_dict, idx):
-        predict_translation, acc = self.validation_step(data_dict, idx)
+        pred_trans_rots, acc = self.validation_step(data_dict, idx)
 
-        T, B, _, _ = predict_translation.shape
+        T, B, _, _ = pred_trans_rots.shape
 
         for i in range(B):
             save_dir = os.path.join(
@@ -259,22 +259,25 @@ class Jigsaw3D(pl.LightningModule):
                 str(data_dict['data_id'][i].item())
             )
             os.makedirs(save_dir, exist_ok=True)
-            c_translation = predict_translation[:, i, ...]
+            c_trans_rots = pred_trans_rots[:, i, ...]
             mask = data_dict["part_valids"][i] == 1
-            c_translation = c_translation[:, mask.cpu().numpy(), ...]
-            np.save(os.path.join(save_dir, f"predict_{acc[i]}.npy"), c_translation)
-            gt_translation = data_dict["part_trans"][i][mask]
-            
+            c_trans_rots = c_trans_rots[:, mask.cpu().numpy(), ...]
+            np.save(os.path.join(save_dir, f"predict_{acc[i]}.npy"), c_trans_rots)
+            gt_transformation = torch.cat(
+                [data_dict["part_trans"][i],
+                    data_dict["part_rots"][i]], dim=-1
+            )[mask]
+
             np.save(os.path.join(
                 save_dir, "gt.npy"),
-                gt_translation.cpu().numpy()
+                gt_transformation.cpu().numpy()
             )
             with open(os.path.join(save_dir, "mesh_file_path.txt"), "w") as f:
                 f.write(data_dict["mesh_file_path"][i])
 
 
     def on_test_epoch_end(self):
-        total_acc, total_rmse_t  = self.on_validation_epoch_end()
+        total_acc, total_rmse_t, total_rmse_r  = self.on_validation_epoch_end()
         # self.print("--------------Metrics on Test Set--------------")
         # self.print("test/part_acc", total_acc)
         # self.print("test/rmse_t", total_rmse_t)
