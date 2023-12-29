@@ -91,6 +91,7 @@ class Jigsaw3D(pl.LightningModule):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
         gt_rots_trans = torch.cat([gt_trans, gt_rots], dim=-1)
+        ref_part = data_dict["ref_part"]
 
         noise = torch.randn(gt_rots_trans.shape, device=self.device)
 
@@ -101,6 +102,8 @@ class Jigsaw3D(pl.LightningModule):
         
         noisy_trans_and_rots = self.noise_scheduler.add_noise(gt_rots_trans, noise, timesteps)
 
+        if self.cfg.model.ref_part:
+            noisy_trans_and_rots[torch.arange(B), ref_part] = gt_rots_trans[torch.arange(B), ref_part]
 
         part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
         part_pcs = part_pcs[data_dict['part_valids'].bool()]
@@ -124,6 +127,7 @@ class Jigsaw3D(pl.LightningModule):
             xyz, 
             data_dict['part_valids'],
             data_dict["part_scale"],
+            ref_part
         )
 
         output_dict = {
@@ -178,6 +182,8 @@ class Jigsaw3D(pl.LightningModule):
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
         noisy_trans_and_rots = randn_tensor(gt_trans_and_rots.shape, device=self.device)
 
+        ref_part = data_dict["ref_part"]
+
         B, P, N, C = data_dict["part_pcs"].shape
 
         all_pred_trans_rots = []
@@ -208,11 +214,15 @@ class Jigsaw3D(pl.LightningModule):
                 xyz, 
                 data_dict["part_valids"],
                 data_dict["part_scale"],
+                ref_part
             )
         
             vNext = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
             noisy_trans_and_rots = vNext    
 
+            if self.cfg.model.ref_part:
+                noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]     
+            
             all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
 
         pts = data_dict['part_pcs']

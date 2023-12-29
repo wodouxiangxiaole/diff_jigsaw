@@ -22,6 +22,9 @@ class DiffModel(nn.Module):
         self.out_channels = cfg.model.out_channels
         self.num_layers = cfg.model.num_layers
         self.num_heads = cfg.model.num_heads
+        
+        if cfg.model.ref_part:
+            self.ref_part_emb = nn.Embedding(2, cfg.model.embed_dim)
 
         self.activation = nn.SiLU()
         self.transformer_layers = nn.ModuleList(
@@ -139,8 +142,20 @@ class DiffModel(nn.Module):
         out_dec = self.output_linear3(out_dec)
         return out_dec
 
+    def _add_ref_part_emb(self, B, x_emb, ref_part):
+        """
+        x_emb: B, N, 256
+        ref_part_valids: B, N
+        """
+        x_emb = x_emb.reshape(B, -1, self.model_channels)
+        ref_part_emb = self.ref_part_emb.weight[0].repeat(B, x_emb.shape[1], 1)
+        ref_part_emb[torch.arange(B), ref_part] = self.ref_part_emb.weight[1]
 
-    def forward(self, x, timesteps, latent, xyz, part_valids, scale):
+        x_emb = x_emb + ref_part_emb
+        return x_emb.reshape(-1, self.model_channels)
+
+
+    def forward(self, x, timesteps, latent, xyz, part_valids, scale, ref_part):
         """
         Latent already transform
 
@@ -157,6 +172,9 @@ class DiffModel(nn.Module):
 
         x_emb, shape_emb, pos_emb, time_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
         self_mask, gen_mask = self._gen_mask(L, N, B, part_valids)
+
+        if self.cfg.model.ref_part:
+            x_emb = self._add_ref_part_emb(B, x_emb, ref_part)
 
         x_emb = x_emb.reshape(B, N, 1, -1)
         x_emb = x_emb.repeat(1, 1, L, 1)

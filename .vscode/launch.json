@@ -10,14 +10,32 @@
             "request": "launch",
             "program": "${workspaceFolder}/train.py",
             "args": [
-                "experiment_name=overfitting_2",
+                "experiment_name=overfitting_ref_part",
+                "model.ref_part=True",
                 "data.overfit=1",
                 "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
+                "data.val_batch_size=1",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
         },
-
+        {
+            "name": "test-ref-overfitting",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/test.py",
+            "args": [
+                "experiment_name=overfitting_ref_part",
+                "model.ref_part=True",
+                "data.overfit=1",
+                "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
+                "data.val_batch_size=1",
+                "inference_dir=overfiting_test",
+                "ckpt_path=output/overfitting_ref_part/training/last.ckpt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
         {
             "name": "test",
             "type": "python",
@@ -26,9 +44,9 @@
             "args": [
                 "experiment_name=train_all_bs24_4gpu",
                 "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
-                "inference_dir=inference_steps_1000",
+                "inference_dir=test_on_training",
                 "ckpt_path=output/train_all_bs24_4gpu/training/last.ckpt",
-                "model.num_inference_steps=1000",
+                "model.num_inference_steps=100",
                 "data.val_batch_size=10",
             ],
             "console": "integratedTerminal",

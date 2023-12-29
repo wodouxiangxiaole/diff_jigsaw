@@ -128,7 +128,7 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
     # CUDA version fps samling. Speed up the fps time
     batch = torch.arange(B).unsqueeze(-1).repeat(1, N).reshape(-1).to(xyz.device)
     ratio = torch.tensor(npoint / N, dtype=torch.float64, device=xyz.device)
-    fps_idx = fps(xyz.reshape(B*N, -1), batch=batch, ratio=ratio)
+    fps_idx = fps(xyz.reshape(B*N, -1), batch=batch, ratio=ratio, random_start=False)
     batch_offsets = (fps_idx // N) * N
     fps_idx = fps_idx - batch_offsets
 

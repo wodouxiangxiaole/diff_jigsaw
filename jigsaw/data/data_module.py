@@ -17,9 +17,9 @@ class DataModule(pl.LightningDataModule):
         return self.train_data
 
     def val_dataloader(self):
-        return self.test_data
+        return self.train_data
     
     # Make the val data to the test data    
     def test_dataloader(self):
-        return self.test_data
+        return self.train_data
 

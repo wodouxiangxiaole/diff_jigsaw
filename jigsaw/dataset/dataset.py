@@ -51,6 +51,17 @@ class GeometryLatentDataset(Dataset):
             scale = data_dict['scale']
             part_rots = data_dict["gt_quats"]
 
+            if cfg.model.ref_part:
+                # make every ref part gt translation to 0
+                # every part translation is relative to ref part
+                # lead to less ambiguity 
+                ref_part = np.argmax(scale[:num_parts])
+                # ref_gt_translation = part_trans[ref_part]
+                # for i in range(num_parts):
+                #     part_trans[i] = part_trans[i] - ref_gt_translation
+            else:
+                ref_part = -1
+
             sample = {
                 'latent': latent,
                 'data_id': data_id,
@@ -63,6 +74,7 @@ class GeometryLatentDataset(Dataset):
                 'part_pcs': part_pcs,
                 'part_scale': scale,
                 'part_rots': part_rots,
+                'ref_part': ref_part
             }
 
             self.data_list.append(sample)
