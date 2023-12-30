@@ -22,7 +22,7 @@ class DiffModel(nn.Module):
         self.out_channels = cfg.model.out_channels
         self.num_layers = cfg.model.num_layers
         self.num_heads = cfg.model.num_heads
-        
+
         if cfg.model.ref_part:
             self.ref_part_emb = nn.Embedding(2, cfg.model.embed_dim)
 
@@ -90,10 +90,27 @@ class DiffModel(nn.Module):
         # Pos encoding for indicating the sequence. which part is for the reference
         self.pos_encoding = PositionalEncoding(self.model_channels)
 
-        self.output_linear1 = nn.Linear(self.model_channels, self.model_channels)
-        self.output_linear2 = nn.Linear(self.model_channels, self.model_channels // 2)
-        self.output_linear3 = nn.Linear(self.model_channels // 2, self.out_channels)
+        # self.output_linear1 = nn.Linear(self.model_channels, self.model_channels)
+        # self.output_linear2 = nn.Linear(self.model_channels, self.model_channels // 2)
+        # self.output_linear3 = nn.Linear(self.model_channels // 2, self.out_channels)
+        
+        # mlp out for translation N, 256 -> N, 3
+        self.mlp_out_trans = nn.Sequential(
+            nn.Linear(self.model_channels, self.model_channels),
+            nn.SiLU(),
+            nn.Linear(self.model_channels, self.model_channels // 2),
+            nn.SiLU(),
+            nn.Linear(self.model_channels // 2, 3),
+        )
 
+        # mlp out for rotation N, 256 -> N, 4
+        self.mlp_out_rot = nn.Sequential(
+            nn.Linear(self.model_channels, self.model_channels),
+            nn.SiLU(),
+            nn.Linear(self.model_channels, self.model_channels // 2),
+            nn.SiLU(),
+            nn.Linear(self.model_channels // 2, 4),
+        )
 
 
     def _gen_mask(self, L, N, B, mask):
@@ -130,17 +147,30 @@ class DiffModel(nn.Module):
         x_emb = self.param_fc(self.param_embedding(x))
         xyz_pos_emb = self.pos_fc(xyz_pos_emb)
         return x_emb, shape_emb, xyz_pos_emb, time_emb
-    
+
+
+    # def _out(self, data_emb, B, N, L):
+    #     out = data_emb.reshape(B, N, L, self.model_channels)
+    #     # Avg pooling
+    #     out = out.mean(dim=2)
+    #     out_dec = self.output_linear1(out)
+    #     out_dec = self.activation(out_dec)
+    #     out_dec = self.output_linear2(out_dec)
+    #     out_dec = self.output_linear3(out_dec)
+    #     return out_dec
+
 
     def _out(self, data_emb, B, N, L):
         out = data_emb.reshape(B, N, L, self.model_channels)
+
         # Avg pooling
         out = out.mean(dim=2)
-        out_dec = self.output_linear1(out)
-        out_dec = self.activation(out_dec)
-        out_dec = self.output_linear2(out_dec)
-        out_dec = self.output_linear3(out_dec)
-        return out_dec
+
+        trans = self.mlp_out_trans(out)
+        rots = self.mlp_out_rot(out)
+
+        return torch.cat([trans, rots], dim=-1)
+
 
     def _add_ref_part_emb(self, B, x_emb, ref_part):
         """
@@ -186,10 +216,8 @@ class DiffModel(nn.Module):
 
         data_emb = data_emb + condition_emb
 
-
         for layer in self.transformer_layers:
             data_emb = layer(data_emb, self_mask, gen_mask)
-            
 
         # data_emb (B, N*L, C)
         out_dec = self._out(data_emb, B, N, L)

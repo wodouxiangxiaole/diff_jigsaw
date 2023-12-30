@@ -21,5 +21,5 @@ class DataModule(pl.LightningDataModule):
     
     # Make the val data to the test data    
     def test_dataloader(self):
-        return self.train_data
+        return self.test_data
 

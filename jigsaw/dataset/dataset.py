@@ -14,6 +14,7 @@ from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 # from pytorch3d import transforms
+from scipy.spatial.transform import Rotation as R
 
 
 class GeometryLatentDataset(Dataset):
@@ -56,9 +57,7 @@ class GeometryLatentDataset(Dataset):
                 # every part translation is relative to ref part
                 # lead to less ambiguity 
                 ref_part = np.argmax(scale[:num_parts])
-                # ref_gt_translation = part_trans[ref_part]
-                # for i in range(num_parts):
-                #     part_trans[i] = part_trans[i] - ref_gt_translation
+
             else:
                 ref_part = -1
 
@@ -67,7 +66,6 @@ class GeometryLatentDataset(Dataset):
                 'data_id': data_id,
                 'part_valids': part_valids,
                 'part_trans': part_trans,
-                'part_r'
                 'xyz': xyz,
                 'mesh_file_path': mesh_file_path,
                 'num_parts': num_parts,

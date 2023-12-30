@@ -25,31 +25,35 @@ def main(cfg):
 
     for data_dict in train_loader:
         gt_trans = data_dict["part_trans"][0].cuda()
+        gt_rots = data_dict["part_rots"][0].cuda()
+        gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
+
         data_id = str(data_dict["data_id"].item())
 
-        if data_id != "209":
+        if data_id != "0":
             continue
 
-        num_parts = data_dict["num_parts"].item()
-        noise = torch.randn([20, 3], device=gt_trans.device)
+        for i in range(100):
+            num_parts = data_dict["num_parts"].item()
+            noise = torch.randn([20, 7], device=gt_trans_and_rots.device)
 
-        forward_translation = []
-        for t in range(1000):
-            t = torch.tensor(t).cuda()
-            # noise = torch.randn([20, 3], device=gt_trans.device)
+            forward_translation = []
+            
+            for t in range(1000):
+                t = torch.tensor(t).cuda()
 
-            timesteps = t.reshape(-1).repeat(gt_trans.shape[0]).cuda()
-            noisy_trans = noise_scheduler.add_noise(gt_trans, noise, timesteps)
-            forward_translation.append(noisy_trans[:num_parts].detach().cpu().numpy())
-        
-        save_dir = f"{cfg.save_dir}/{data_id}"
-        
-        os.makedirs(save_dir, exist_ok=True)
-        np.save(f"{save_dir}/translation.npy", np.array(forward_translation))      
-        with open(os.path.join(save_dir, "mesh_file_path.txt"), "w") as f:
-            f.write(data_dict["mesh_file_path"][0])  
-        np.save(f"{save_dir}/gt.npy", gt_trans.detach().cpu().numpy())
-        forward_translation = []
+                timesteps = t.reshape(-1).repeat(gt_trans_and_rots.shape[0]).cuda()
+                noisy_trans = noise_scheduler.add_noise(gt_trans_and_rots, noise, timesteps)
+                forward_translation.append(noisy_trans[:num_parts].detach().cpu().numpy())
+            
+            save_dir = f"{cfg.save_dir}/{data_id}_{str(i)}"
+            
+            os.makedirs(save_dir, exist_ok=True)
+            np.save(f"{save_dir}/translation.npy", np.array(forward_translation))      
+            with open(os.path.join(save_dir, "mesh_file_path.txt"), "w") as f:
+                f.write(data_dict["mesh_file_path"][0])  
+            np.save(f"{save_dir}/gt.npy", gt_trans_and_rots.detach().cpu().numpy())
+            forward_translation = []
 
     
 

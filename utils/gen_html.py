@@ -16,16 +16,6 @@ def get_acc_category(acc):
         return 'accuracy_less_0.2'
     
 
-def get_video_info(videos_dir, acc_category_function):
-    video_info = {}
-    for video_file in sorted(os.listdir(videos_dir)):
-        if video_file.endswith('.mp4'):
-            base_name, acc_str = os.path.splitext(video_file)[0].split('_')
-            acc = float(acc_str)
-            category = acc_category_function(acc)
-            video_info[base_name] = (video_file, acc, category)
-    return video_info
-
 import os
 
 def create_main_page(acc_ranges, output_dir, experiment_name):
@@ -46,7 +36,7 @@ def create_main_page(acc_ranges, output_dir, experiment_name):
     """
 
     for category in acc_ranges:
-        html_content += f"<p><a href='html/{category}_page_1.html'>{category}</a></p>"
+        html_content += f"<p><a href='{category}_page_1.html'>{category}</a></p>"
 
     html_content += """
     </body>
@@ -57,28 +47,9 @@ def create_main_page(acc_ranges, output_dir, experiment_name):
         file.write(html_content)
 
 
-
-def create_accuracy_pages(videos_dir, images_dir, videos_dir_compare, acc_ranges, output_dir, items_per_page=30):
-    linear_videos = get_video_info(videos_dir, get_acc_category)
-    custom_videos = get_video_info(videos_dir_compare, get_acc_category)
-
-    rel_images_dir = os.path.relpath(images_dir, output_dir)
+def create_accuracy_pages(videos_dir, images_dir, acc_ranges, output_dir, items_per_page=30):
     rel_videos_dir = os.path.relpath(videos_dir, output_dir)
-    rel_videos_dir_compare = os.path.relpath(videos_dir_compare, output_dir)
-
-    acc_ranges = {
-        'accuracy_1': [],
-        'accuracy_0.8-1': [],
-        'accuracy_0.5-0.8': [],
-        'accuracy_0.2-0.5': [],
-        'accuracy_less_0.2': []
-    }
-
-    for base_name in linear_videos:
-        if base_name in custom_videos:
-            linear_video_file, linear_acc, _ = linear_videos[base_name]
-            custom_video_file, custom_acc, custom_category = custom_videos[base_name]
-            acc_ranges[custom_category].append((base_name, linear_video_file, linear_acc, custom_video_file, custom_acc))
+    rel_images_dir = os.path.relpath(images_dir, output_dir)
 
     for category, files in acc_ranges.items():
         num_pages = len(files) // items_per_page + (1 if len(files) % items_per_page > 0 else 0)
@@ -104,15 +75,12 @@ def create_accuracy_pages(videos_dir, images_dir, videos_dir_compare, acc_ranges
             <body>
                 <h1>Visualization for Accuracy Range: {category} - Page {page_number}</h1>
                 <table>
-                    <tr><th>File Name</th><th>Ground Truth Image</th><th>Linear Scheduler</th><th>Linear Scheduler Accuracy</th><th>Custom Scheduler</th><th>Custom Scheduler Accuracy</th></tr>
+                    <tr><th>File Name</th><th>Ground Truth Image</th><th>Video</th><th>Accuracy</th></tr>
             """
 
-            for item in page_files:
-                base_name, linear_video_file, linear_acc, custom_video_file, custom_acc = item
-
+            for base_name, video_file, acc in page_files:
                 image_file = base_name + '.png'
-                linear_video_path = os.path.join(rel_videos_dir, linear_video_file)
-                custom_video_path = os.path.join(rel_videos_dir_compare, custom_video_file)
+                video_path = os.path.join(rel_videos_dir, video_file)
                 image_path = os.path.join(rel_images_dir, image_file)
 
                 if os.path.exists(os.path.join(images_dir, image_file)):
@@ -121,18 +89,12 @@ def create_accuracy_pages(videos_dir, images_dir, videos_dir_compare, acc_ranges
                             <td>{base_name}</td>
                             <td><img src="{image_path}" /></td>
                             <td><video autoplay muted loop controls>
-                                <source src="{linear_video_path}" type="video/mp4">
+                                <source src="{video_path}" type="video/mp4">
                                 Your browser does not support the video tag.
                             </video></td>
-                            <td>{linear_acc}</td>
-                            <td><video autoplay muted loop controls>
-                                <source src="{custom_video_path}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video></td>
-                            <td>{custom_acc}</td>
+                            <td>{acc}</td>
                         </tr>
                     """
-
 
             html_content += """
                 </table>
@@ -155,16 +117,13 @@ def create_accuracy_pages(videos_dir, images_dir, videos_dir_compare, acc_ranges
 
 
 
-
 def main():
-    videos_dir = "./render_results/linear_scheduler_results_bs50"  # Directory containing videos
-    images_dir = "./render_results/linear_scheduler_results_bs50"  # Directory containing ground truth images
-    videos_dir_compare = "./render_results/custom_scheduler_results_bs50" 
+    videos_dir = "./render_results/test_results"  # Directory containing videos
+    images_dir = "./render_results/test_results"  # Directory containing ground truth images
     output_dir = "./render_results"  # Directory for output HTML files
-    html_dir = os.path.join(output_dir, "html")  # Subdirectory for HTML files
 
-    os.makedirs(html_dir, exist_ok=True)
-    
+    os.makedirs(output_dir, exist_ok=True)
+
     # Your existing code to categorize files into acc_ranges goes here
     acc_ranges = {
         'accuracy_1': [],
@@ -173,7 +132,6 @@ def main():
         'accuracy_0.2-0.5': [],
         'accuracy_less_0.2': []
     }
-
 
 
     # Sorting files into buckets
@@ -185,11 +143,11 @@ def main():
             acc_ranges[category].append((base_name, video_file, acc))
 
     
-    experiment_name = "results"
-
+    experiment_name = "standard training results"
     # Create main page and separate accuracy pages
     create_main_page(acc_ranges, output_dir, experiment_name)
-    create_accuracy_pages(videos_dir, images_dir, videos_dir_compare, acc_ranges, html_dir, 30)
+    create_accuracy_pages(videos_dir, images_dir, acc_ranges, output_dir, 30)
+
 
 if __name__ == "__main__":
     main()

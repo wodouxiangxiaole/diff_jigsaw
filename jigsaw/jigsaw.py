@@ -116,10 +116,6 @@ class Jigsaw3D(pl.LightningModule):
         latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
         xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
 
-
-        # latent = encoder_out["z_q"].reshape(B, P, self.num_points, self.num_channels)
-        # xyz = encoder_out["xyz"].reshape(B, P, self.num_points, 3)
-
         pred_noise = self.diffusion(
             noisy_trans_and_rots, 
             timesteps, 
@@ -185,6 +181,9 @@ class Jigsaw3D(pl.LightningModule):
         ref_part = data_dict["ref_part"]
 
         B, P, N, C = data_dict["part_pcs"].shape
+        
+        if self.cfg.model.ref_part:
+            noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]  
 
         all_pred_trans_rots = []
 
@@ -199,7 +198,7 @@ class Jigsaw3D(pl.LightningModule):
             part_pcs = part_pcs[data_dict['part_valids'].bool()]
 
             encoder_out = self.encoder.encode(part_pcs)
-
+            
             latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
             xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
 
@@ -288,11 +287,6 @@ class Jigsaw3D(pl.LightningModule):
 
     def on_test_epoch_end(self):
         total_acc, total_rmse_t, total_rmse_r  = self.on_validation_epoch_end()
-        # self.print("--------------Metrics on Test Set--------------")
-        # self.print("test/part_acc", total_acc)
-        # self.print("test/rmse_t", total_rmse_t)
-        # self.print("------------------------------------------------")
-        
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
