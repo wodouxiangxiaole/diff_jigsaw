@@ -7,8 +7,8 @@ data:
   val_nepoch: 100
   data_fn: "everyday.{}.txt"
   
-  data_dir: "../vq_jigsaw/latent_data/bottle_volume_constrained_rot/train/"
-  data_val_dir: "../vq_jigsaw/latent_data/bottle_volume_constrained_rot/val/"
+  data_dir: "../vq_jigsaw/latent_data/bottle_volume_constrained_no_rot/train/"
+  data_val_dir: "../vq_jigsaw/latent_data/bottle_volume_constrained_no_rot/val/"
   category: "Bottle"
   rot_range: -1
   overfit: -1

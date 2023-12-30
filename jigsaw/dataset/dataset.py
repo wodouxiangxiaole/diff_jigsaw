@@ -14,7 +14,6 @@ from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 # from pytorch3d import transforms
-from scipy.spatial.transform import Rotation as R
 
 
 class GeometryLatentDataset(Dataset):
@@ -53,13 +52,21 @@ class GeometryLatentDataset(Dataset):
             part_rots = data_dict["gt_quats"]
 
             if cfg.model.ref_part:
-                # make every ref part gt translation to 0
-                # every part translation is relative to ref part
-                # lead to less ambiguity 
                 ref_part = np.argmax(scale[:num_parts])
-
             else:
                 ref_part = -1
+
+            cur_pts, cur_quats = [], []
+            for i in range(self.max_num_part):
+                if i == ref_part:
+                    pc, gt_quat = self._rotate_pc(part_pcs[i], True)
+                else:
+                    pc, gt_quat = self._rotate_pc(part_pcs[i], False)
+                cur_pts.append(pc)
+                cur_quats.append(gt_quat)
+
+            part_pcs = np.stack(cur_pts, axis=0).astype(np.float32)
+            part_rots = np.stack(cur_quats, axis=0).astype(np.float32)
 
             sample = {
                 'latent': latent,
@@ -77,10 +84,23 @@ class GeometryLatentDataset(Dataset):
 
             self.data_list.append(sample)
 
-
     def __len__(self):
         return len(self.data_list)
-            
+
+
+    def _rotate_pc(self, pc, ref_part):
+        """pc: [N, 3]"""
+        if ref_part:
+            # do not rotate
+            rot_mat = np.eye(3)
+        else:
+            rot_mat = R.random().as_matrix()
+        pc = (rot_mat @ pc.T).T
+        quat_gt = R.from_matrix(rot_mat.T).as_quat()
+        # we use scalar-first quaternion
+        quat_gt = quat_gt[[3, 0, 1, 2]]
+        return pc, quat_gt
+    
 
     def __getitem__(self, idx):
         

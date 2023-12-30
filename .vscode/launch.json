@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "overfitting",
+            "name": "overfitting_fixed_ref_part",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/train.py",
