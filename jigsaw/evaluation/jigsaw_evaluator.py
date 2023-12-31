@@ -92,7 +92,7 @@ def calc_part_acc(pts, trans1, trans2, rot1, rot2, valids, chamfer_distance):
     pts1 = pts1.flatten(0, 1)  # [B*P, N, 3]
     pts2 = pts2.flatten(0, 1)
     loss_per_data = chamfer_distance(pts1, pts2, bidirectional=True, 
-                                    point_reduction="mean", batch_reduction=None,)  # [B*P, N]
+                                    point_reduction="mean", batch_reduction=None)  # [B*P, N]
     loss_per_data = loss_per_data.view(B, P).type_as(pts)
 
     # part with CD < `thre` is considered correct

@@ -17,7 +17,7 @@ model:
 
   type: "avg_pool"
   embedding_type: mlp
-  out_channels: 7
+  out_channels: 4
   std: 1
   multires: 10
   embed_dim: 256

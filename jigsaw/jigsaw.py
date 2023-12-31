@@ -85,28 +85,11 @@ class Jigsaw3D(pl.LightningModule):
         
         return part_pcs
 
-
-    def forward(self, data_dict):
-        gt_trans = data_dict['part_trans']
-        gt_rots = data_dict['part_rots']
-        gt_rots_trans = torch.cat([gt_trans, gt_rots], dim=-1)
-        ref_part = data_dict["ref_part"]
-
-        noise = torch.randn(gt_rots_trans.shape, device=self.device)
-
+    def _extract_features(self, data_dict, noisy_rots_gt_trans):
         B, P, N, C = data_dict["part_pcs"].shape
 
-        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (B,),
-                                  device=self.device).long()
-        
-        noisy_trans_and_rots = self.noise_scheduler.add_noise(gt_rots_trans, noise, timesteps)
-
-        if self.cfg.model.ref_part:
-            noisy_trans_and_rots[torch.arange(B), ref_part] = gt_rots_trans[torch.arange(B), ref_part]
-
-        part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+        part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_rots_gt_trans)
         part_pcs = part_pcs[data_dict['part_valids'].bool()]
-
         encoder_out = self.encoder.encode(part_pcs)
 
         latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
@@ -115,8 +98,30 @@ class Jigsaw3D(pl.LightningModule):
         latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
         xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
 
+        return latent, xyz
+
+    def forward(self, data_dict):
+        gt_trans = data_dict['part_trans']
+        gt_rots = data_dict['part_rots']
+        ref_part = data_dict["ref_part"]
+
+        noise = torch.randn(gt_rots.shape, device=self.device)
+        B, P, N, C = data_dict["part_pcs"].shape
+
+        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (B,),
+                                  device=self.device).long()
+        
+        noisy_rots = self.noise_scheduler.add_noise(gt_rots, noise, timesteps)
+
+        if self.cfg.model.ref_part:
+            noisy_rots[torch.arange(B), ref_part] = gt_rots[torch.arange(B), ref_part]
+
+        noisy_rots_gt_trans = torch.cat([gt_trans, noisy_rots], dim=-1)
+        
+        latent, xyz = self._extract_features(data_dict, noisy_rots_gt_trans)
+
         pred_noise = self.diffusion(
-            noisy_trans_and_rots, 
+            noisy_rots_gt_trans, 
             timesteps, 
             latent, 
             xyz, 
@@ -149,6 +154,7 @@ class Jigsaw3D(pl.LightningModule):
 
         return {'mse_loss': mse_loss}
 
+   
 
     def training_step(self, data_dict, idx):
         output_dict = self(data_dict)
@@ -170,49 +176,32 @@ class Jigsaw3D(pl.LightningModule):
     #         if param.grad is None:
     #             print(f"Parameter not used in forward pass: {name}")
 
-                
+
     def validation_step(self, data_dict, idx):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
-
-        if self.cfg.model.gt_rots:
-            noisy_trans = randn_tensor(gt_trans.shape, device=self.device)
-            noisy_trans_and_rots = torch.cat([noisy_trans, gt_rots], dim=-1)
-        else:
-            noisy_trans_and_rots = randn_tensor(gt_trans_and_rots.shape, device=self.device)
-
+        
         ref_part = data_dict["ref_part"]
 
         B, P, N, C = data_dict["part_pcs"].shape
-        
+        noisy_rots = torch.randn(gt_rots.shape, device=self.device)
+
         if self.cfg.model.ref_part:
-            noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]  
+            noisy_rots[torch.arange(B), ref_part] = gt_rots[torch.arange(B), ref_part]
+
+        noisy_rots_gt_trans = torch.cat([gt_trans, noisy_rots], dim=-1)
 
         all_pred_trans_rots = []
-        all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
+        all_pred_trans_rots.append(noisy_rots_gt_trans.detach().cpu().numpy())
 
         for t in tqdm(self.noise_scheduler.timesteps):
-            timesteps = t.reshape(-1).repeat(len(noisy_trans_and_rots)).cuda()
+            timesteps = t.reshape(-1).repeat(len(noisy_rots_gt_trans)).cuda()
 
-            if t == self.cfg.model.reset_timestep:
-                noisy_trans_and_rots = randn_tensor(gt_trans.shape, device=self.device)
-
-
-            part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
-            part_pcs = part_pcs[data_dict['part_valids'].bool()]
-
-            encoder_out = self.encoder.encode(part_pcs)
-            
-            latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
-            xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
-
-            latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
-            xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
-
+            latent, xyz = self._extract_features(data_dict, noisy_rots_gt_trans)
 
             pred_noise = self.diffusion(
-                noisy_trans_and_rots, 
+                noisy_rots_gt_trans, 
                 timesteps, 
                 latent,
                 xyz, 
@@ -221,15 +210,12 @@ class Jigsaw3D(pl.LightningModule):
                 ref_part
             )
         
-            vNext = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
-            noisy_trans_and_rots = vNext    
-
+            vNext = self.noise_scheduler.step(pred_noise, t, noisy_rots).prev_sample
+            noisy_trans_and_rots = torch.cat([gt_trans, vNext], dim=-1)    
+            
             if self.cfg.model.ref_part:
                 noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]     
             
-            if self.cfg.model.gt_rots:
-                noisy_trans_and_rots[..., 3:] = gt_rots
-
             all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
 
         pts = data_dict['part_pcs']
