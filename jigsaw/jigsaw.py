@@ -3,7 +3,6 @@ from torch.nn import functional as F
 import lightning.pytorch as pl
 import hydra
 from jigsaw.model.diffusion import DiffModel
-# from jigsaw.model.diffusion_cat import DiffModel
 from diffusers import DDPMScheduler, DDIMScheduler
 from tqdm import tqdm
 from chamferdist import ChamferDistance
@@ -176,7 +175,12 @@ class Jigsaw3D(pl.LightningModule):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
-        noisy_trans_and_rots = randn_tensor(gt_trans_and_rots.shape, device=self.device)
+
+        if self.cfg.model.gt_rots:
+            noisy_trans = randn_tensor(gt_trans.shape, device=self.device)
+            noisy_trans_and_rots = torch.cat([noisy_trans, gt_rots], dim=-1)
+        else:
+            noisy_trans_and_rots = randn_tensor(gt_trans_and_rots.shape, device=self.device)
 
         ref_part = data_dict["ref_part"]
 
@@ -186,6 +190,7 @@ class Jigsaw3D(pl.LightningModule):
             noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]  
 
         all_pred_trans_rots = []
+        all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
 
         for t in tqdm(self.noise_scheduler.timesteps):
             timesteps = t.reshape(-1).repeat(len(noisy_trans_and_rots)).cuda()
@@ -222,6 +227,9 @@ class Jigsaw3D(pl.LightningModule):
             if self.cfg.model.ref_part:
                 noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]     
             
+            if self.cfg.model.gt_rots:
+                noisy_trans_and_rots[..., 3:] = gt_rots
+
             all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
 
         pts = data_dict['part_pcs']

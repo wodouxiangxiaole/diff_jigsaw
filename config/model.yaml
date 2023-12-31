@@ -5,6 +5,7 @@ model:
 
   encoder_weights_path: "encoder_ckpts/train_vq_all_normalize_pc/last.ckpt"
   ref_part: False
+  gt_rots: False
   scheduler: "ddpm"
 
   cd_loss: False
@@ -31,6 +32,8 @@ model:
   BETA_START: 0.0001
   BETA_END: 0.02
   num_inference_steps: 100
+
+
 
   lr_scheduler:
     _target_: torch.optim.lr_scheduler.MultiStepLR
