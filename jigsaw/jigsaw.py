@@ -26,6 +26,7 @@ class Jigsaw3D(pl.LightningModule):
         self.diffusion = DiffModel(cfg)
         self.save_hyperparameters()
 
+        self.encoder = hydra.utils.instantiate(cfg.ae.ae_name, cfg)
         if cfg.model.scheduler == "ddpm":
             if cfg.model.DDPM_BETA_SCHEDULE == "linear":
                 self.noise_scheduler = DDPMScheduler(
@@ -73,17 +74,6 @@ class Jigsaw3D(pl.LightningModule):
         self.metric = ChamferDistance()
 
 
-    # def _apply_rots(self, part_pcs, noise_params):
-    #     """
-    #     Apply Noisy rotations to all points
-    #     """
-    #     noise_quat = noise_params[..., 3:]
-    #     noise_quat = noise_quat / noise_quat.norm(dim=-1, keepdim=True)
-    #     part_pcs = transforms.quaternion_apply(noise_quat.unsqueeze(2), part_pcs)
-        
-    #     return part_pcs
-
-
     def forward(self, data_dict):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
@@ -103,6 +93,14 @@ class Jigsaw3D(pl.LightningModule):
 
         if self.cfg.model.ref_part:
             noisy_trans_and_rots[torch.arange(B), ref_part] = gt_rots_trans[torch.arange(B), ref_part]
+
+
+        part_pcs = data_dict["part_pcs"][data_dict['part_valids'].bool()]
+        encoder_out = self.encoder.encode(part_pcs)
+        latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
+        xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
+        latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
+        xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
 
 
         pred_noise = self.diffusion(
@@ -188,8 +186,12 @@ class Jigsaw3D(pl.LightningModule):
             if t == self.cfg.model.reset_timestep:
                 noisy_trans_and_rots = randn_tensor(gt_trans.shape, device=self.device)
 
-            latent = data_dict["latent"]
-            xyz = data_dict["xyz"]
+            part_pcs = data_dict["part_pcs"][data_dict['part_valids'].bool()]
+            encoder_out = self.encoder.encode(part_pcs)
+            latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
+            xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
+            latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
+            xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
 
             pred_noise = self.diffusion(
                 noisy_trans_and_rots, 

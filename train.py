@@ -27,6 +27,13 @@ def main(cfg):
     # initialize model
     model = hydra.utils.instantiate(cfg.model.model_name, cfg)
 
+    if cfg.model.encoder_weights_path is not None:
+        encoder_weights = torch.load(cfg.model.encoder_weights_path)['state_dict']
+        model.encoder.load_state_dict({k.replace('ae.', ''): v for k, v in encoder_weights.items()})
+        if cfg.model.fixed_encoder_weights:
+            for param in model.encoder.parameters():
+                param.requires_grad = False
+    
     # initialize logger
     logger = hydra.utils.instantiate(cfg.logger)
 

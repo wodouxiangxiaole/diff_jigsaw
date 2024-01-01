@@ -8,6 +8,8 @@ model:
   gt_rots: False
   scheduler: "ddpm"
 
+  fixed_encoder_weights: True
+
   cd_loss: False
   reset_timestep: -1
   weighted_small_pieces: False
