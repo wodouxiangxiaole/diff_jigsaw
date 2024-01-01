@@ -13,7 +13,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-# from pytorch3d import transforms
 from scipy.spatial.transform import Rotation as R
 
 
