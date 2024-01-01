@@ -13,6 +13,8 @@ data:
   rot_range: -1
   overfit: -1
 
+  rot_in_getitem: False
+
   ignore_small_scale: False
 
   data_keys:

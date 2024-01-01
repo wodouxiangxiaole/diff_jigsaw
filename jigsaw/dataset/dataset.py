@@ -27,6 +27,7 @@ class GeometryLatentDataset(Dataset):
             data_fn
     ):
 
+        self.cfg = cfg
         self.category = category if category.lower() != 'all' else ''
         self.data_dir = data_dir
         self.data_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npz')])
@@ -78,13 +79,53 @@ class GeometryLatentDataset(Dataset):
             self.data_list.append(sample)
 
 
+    def _rotate_pc(self, pc, ref_part):
+        """pc: [N, 3]"""
+        if ref_part:
+            # do not rotate
+            rot_mat = np.eye(3)
+        else:
+            rot_mat = R.random().as_matrix()
+        pc = (rot_mat @ pc.T).T
+        quat_gt = R.from_matrix(rot_mat.T).as_quat()
+        # we use scalar-first quaternion
+        quat_gt = quat_gt[[3, 0, 1, 2]]
+        return pc, quat_gt
+    
+    def _pad_data(self, data):
+        """Pad data to shape [`self.max_num_part`, data.shape[1], ...]."""
+        data = np.array(data)
+        pad_shape = (self.max_num_part, ) + tuple(data.shape[1:])
+        pad_data = np.zeros(pad_shape, dtype=np.float32)
+        pad_data[:data.shape[0]] = data
+        return pad_data
+
+
     def __len__(self):
         return len(self.data_list)
             
 
     def __getitem__(self, idx):
         
-        return self.data_list[idx]
+        if self.cfg.data.rot_in_getitem:
+            data_dict = self.data_list[idx]
+            num_parts = data_dict['num_parts']
+            cur_quat, cur_pts = [], []
+
+            for i in range(num_parts):
+                pc, quat_gt = self._rotate_pc(data_dict['part_pcs'][i], i == data_dict['ref_part'])
+                cur_quat.append(quat_gt)
+                cur_pts.append(pc)
+
+            cur_pts = self._pad_data(np.stack(cur_pts, axis=0))  # [P, N, 3]
+            cur_quat = self._pad_data(np.stack(cur_quat, axis=0))  # [P, 4]
+            
+            data_dict['part_pcs'] = cur_pts
+            data_dict['part_rots'] = cur_quat
+
+            return data_dict
+        else:
+            return self.data_list[idx]
 
 
 def build_geometry_dataloader(cfg):

@@ -4,6 +4,7 @@ output/
 xgutils/
 forward_translation/
 render_results/
+wandb/
 
 
 __pycache__

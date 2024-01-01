@@ -10,11 +10,14 @@
             "request": "launch",
             "program": "${workspaceFolder}/train.py",
             "args": [
-                "experiment_name=overfitting_test",
+                "experiment_name=overfitting_rot_every_batch",
                 "model.ref_part=True",
                 "data.overfit=1",
                 "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
                 "data.val_batch_size=1",
+                "data.rot_in_getitem=True",
+                "data.data_dir=../vq_jigsaw/latent_data/bottle_volume_constrained_no_rot/train/",
+                "data.data_val_dir=../vq_jigsaw/latent_data/bottle_volume_constrained_no_rot/val/",
             ],
             "console": "integratedTerminal",
             "justMyCode": true
@@ -42,14 +45,12 @@
             "request": "launch",
             "program": "${workspaceFolder}/test.py",
             "args": [
-                "experiment_name=train_all_bs24_4gpu_5000iters_fixed_encoder_add_ref_part",
+                "experiment_name=train_all_bs24_4gpu",
                 "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
-                "inference_dir=given_gt_rots",
-                "ckpt_path=output/train_all_bs24_4gpu_5000iters_fixed_encoder_add_ref_part/training/last.ckpt",
+                "inference_dir=test_on_training_2000epoch",
+                "ckpt_path=output/train_all_bs24_4gpu/training/last.ckpt",
                 "model.num_inference_steps=100",
                 "data.val_batch_size=6",
-                "model.ref_part=True",
-                "model.gt_rots=True"
             ],
             "console": "integratedTerminal",
             "justMyCode": true
