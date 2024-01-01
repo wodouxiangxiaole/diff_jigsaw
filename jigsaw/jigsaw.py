@@ -58,8 +58,6 @@ class Jigsaw3D(pl.LightningModule):
         else:
             raise NotImplementedError
 
-        self.encoder = hydra.utils.instantiate(cfg.ae.ae_name, cfg)
-
         self.cd_loss = ChamferDistance()
         self.num_points = cfg.model.num_point
         self.num_channels = cfg.model.num_dim
@@ -75,15 +73,15 @@ class Jigsaw3D(pl.LightningModule):
         self.metric = ChamferDistance()
 
 
-    def _apply_rots(self, part_pcs, noise_params):
-        """
-        Apply Noisy rotations to all points
-        """
-        noise_quat = noise_params[..., 3:]
-        noise_quat = noise_quat / noise_quat.norm(dim=-1, keepdim=True)
-        part_pcs = transforms.quaternion_apply(noise_quat.unsqueeze(2), part_pcs)
+    # def _apply_rots(self, part_pcs, noise_params):
+    #     """
+    #     Apply Noisy rotations to all points
+    #     """
+    #     noise_quat = noise_params[..., 3:]
+    #     noise_quat = noise_quat / noise_quat.norm(dim=-1, keepdim=True)
+    #     part_pcs = transforms.quaternion_apply(noise_quat.unsqueeze(2), part_pcs)
         
-        return part_pcs
+    #     return part_pcs
 
 
     def forward(self, data_dict):
@@ -91,6 +89,8 @@ class Jigsaw3D(pl.LightningModule):
         gt_rots = data_dict['part_rots']
         gt_rots_trans = torch.cat([gt_trans, gt_rots], dim=-1)
         ref_part = data_dict["ref_part"]
+        latent = data_dict["latent"]
+        xyz = data_dict["xyz"]
 
         noise = torch.randn(gt_rots_trans.shape, device=self.device)
 
@@ -104,16 +104,6 @@ class Jigsaw3D(pl.LightningModule):
         if self.cfg.model.ref_part:
             noisy_trans_and_rots[torch.arange(B), ref_part] = gt_rots_trans[torch.arange(B), ref_part]
 
-        part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
-        part_pcs = part_pcs[data_dict['part_valids'].bool()]
-
-        encoder_out = self.encoder.encode(part_pcs)
-
-        latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
-        xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
-
-        latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
-        xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
 
         pred_noise = self.diffusion(
             noisy_trans_and_rots, 
@@ -198,18 +188,8 @@ class Jigsaw3D(pl.LightningModule):
             if t == self.cfg.model.reset_timestep:
                 noisy_trans_and_rots = randn_tensor(gt_trans.shape, device=self.device)
 
-
-            part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
-            part_pcs = part_pcs[data_dict['part_valids'].bool()]
-
-            encoder_out = self.encoder.encode(part_pcs)
-            
-            latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
-            xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
-
-            latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
-            xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
-
+            latent = data_dict["latent"]
+            xyz = data_dict["xyz"]
 
             pred_noise = self.diffusion(
                 noisy_trans_and_rots, 
