@@ -104,7 +104,8 @@ class Jigsaw3D(pl.LightningModule):
         if self.cfg.model.ref_part:
             noisy_trans_and_rots[torch.arange(B), ref_part] = gt_rots_trans[torch.arange(B), ref_part]
 
-        part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+        # part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+        part_pcs = data_dict['part_pcs']
         part_pcs = part_pcs[data_dict['part_valids'].bool()]
 
         encoder_out = self.encoder.encode(part_pcs)
@@ -172,6 +173,18 @@ class Jigsaw3D(pl.LightningModule):
 
                 
     def validation_step(self, data_dict, idx):
+        # Validation loss
+        output_dict = self(data_dict)
+        loss_dict = self._loss(data_dict, output_dict)
+        # calculate the total loss and logs
+        total_loss = 0
+        for loss_name, loss_value in loss_dict.items():
+            total_loss += loss_value
+            self.log(f"val_loss/{loss_name}", loss_value, on_step=False, on_epoch=True)
+        self.log(f"val_loss/total_loss", total_loss, on_step=False, on_epoch=True)
+        
+
+        # Validation metricss
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
@@ -199,7 +212,8 @@ class Jigsaw3D(pl.LightningModule):
                 noisy_trans_and_rots = randn_tensor(gt_trans.shape, device=self.device)
 
 
-            part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+            # part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_trans_and_rots)
+            part_pcs = data_dict['part_pcs']
             part_pcs = part_pcs[data_dict['part_valids'].bool()]
 
             encoder_out = self.encoder.encode(part_pcs)
