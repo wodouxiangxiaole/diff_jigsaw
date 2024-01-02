@@ -56,7 +56,6 @@ class GeometryLatentDataset(Dataset):
                 # every part translation is relative to ref part
                 # lead to less ambiguity 
                 ref_part = np.argmax(scale[:num_parts])
-
             else:
                 ref_part = -1
 

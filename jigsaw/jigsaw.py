@@ -85,20 +85,20 @@ class Jigsaw3D(pl.LightningModule):
         
         return part_pcs
 
-    def _extract_features(self, data_dict, noisy_rots_gt_trans):
-        B, P, N, C = data_dict["part_pcs"].shape
+    # def _extract_features(self, data_dict, noisy_rots_gt_trans):
+    #     B, P, N, C = data_dict["part_pcs"].shape
 
-        part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_rots_gt_trans)
-        part_pcs = part_pcs[data_dict['part_valids'].bool()]
-        encoder_out = self.encoder.encode(part_pcs)
+    #     part_pcs = self._apply_rots(data_dict['part_pcs'], noisy_rots_gt_trans)
+    #     part_pcs = part_pcs[data_dict['part_valids'].bool()]
+    #     encoder_out = self.encoder.encode(part_pcs)
 
-        latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
-        xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
+    #     latent = torch.zeros(B, P, self.num_points, self.num_channels, device=self.device)
+    #     xyz = torch.zeros(B, P, self.num_points, 3, device=self.device)
 
-        latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
-        xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
+    #     latent[data_dict['part_valids'].bool()] = encoder_out["z_q"]
+    #     xyz[data_dict['part_valids'].bool()] = encoder_out["xyz"]
 
-        return latent, xyz
+    #     return latent, xyz
 
     def forward(self, data_dict):
         gt_trans = data_dict['part_trans']
@@ -115,13 +115,15 @@ class Jigsaw3D(pl.LightningModule):
 
         if self.cfg.model.ref_part:
             noisy_rots[torch.arange(B), ref_part] = gt_rots[torch.arange(B), ref_part]
-
-        noisy_rots_gt_trans = torch.cat([gt_trans, noisy_rots], dim=-1)
         
-        latent, xyz = self._extract_features(data_dict, noisy_rots_gt_trans)
+        # latent, xyz = self._extract_features(data_dict, noisy_rots_gt_trans)
+
+        latent = data_dict["latent"]
+        xyz = data_dict["xyz"]
 
         pred_noise = self.diffusion(
-            noisy_rots_gt_trans, 
+            gt_trans,
+            noisy_rots, 
             timesteps, 
             latent, 
             xyz, 
@@ -180,7 +182,6 @@ class Jigsaw3D(pl.LightningModule):
     def validation_step(self, data_dict, idx):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
-        gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
         
         ref_part = data_dict["ref_part"]
 
@@ -190,37 +191,38 @@ class Jigsaw3D(pl.LightningModule):
         if self.cfg.model.ref_part:
             noisy_rots[torch.arange(B), ref_part] = gt_rots[torch.arange(B), ref_part]
 
-        noisy_rots_gt_trans = torch.cat([gt_trans, noisy_rots], dim=-1)
 
-        all_pred_trans_rots = []
-        all_pred_trans_rots.append(noisy_rots_gt_trans.detach().cpu().numpy())
+        all_pred_trans_rots = [None]
 
         for t in tqdm(self.noise_scheduler.timesteps):
-            timesteps = t.reshape(-1).repeat(len(noisy_rots_gt_trans)).cuda()
+            timesteps = t.reshape(-1).repeat(len(noisy_rots)).cuda()
 
-            latent, xyz = self._extract_features(data_dict, noisy_rots_gt_trans)
+            latent = data_dict["latent"]
+            xyz = data_dict["xyz"]
 
             pred_noise = self.diffusion(
-                noisy_rots_gt_trans, 
+                gt_trans,
+                noisy_rots, 
                 timesteps, 
-                latent,
+                latent, 
                 xyz, 
-                data_dict["part_valids"],
+                data_dict['part_valids'],
                 data_dict["part_scale"],
                 ref_part
             )
         
             vNext = self.noise_scheduler.step(pred_noise, t, noisy_rots).prev_sample
-            noisy_trans_and_rots = torch.cat([gt_trans, vNext], dim=-1)    
+            noisy_rots = vNext    
             
             if self.cfg.model.ref_part:
-                noisy_trans_and_rots[torch.arange(B), ref_part] = gt_trans_and_rots[torch.arange(B), ref_part]     
+                noisy_rots[torch.arange(B), ref_part] = gt_rots[torch.arange(B), ref_part]   
+
+            # all_pred_trans_rots.append(None)
             
-            all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
 
         pts = data_dict['part_pcs']
-        pred_translation = noisy_trans_and_rots[..., :3]
-        pred_rots = noisy_trans_and_rots[..., 3:]
+        pred_translation = gt_trans
+        pred_rots = noisy_rots
 
         acc = calc_part_acc(pts, trans1=pred_translation, trans2=gt_trans,
                             rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
