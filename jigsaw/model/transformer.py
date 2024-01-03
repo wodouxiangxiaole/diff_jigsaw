@@ -48,7 +48,7 @@ def attention(q, k, v, d_k, mask=None, dropout=None):
     if dropout is not None:
         scores = dropout(scores)
     output = th.matmul(scores, v)
-    return output
+    return output, scores
 
 
 class MultiHeadAttention(nn.Module):
@@ -76,11 +76,11 @@ class MultiHeadAttention(nn.Module):
         
         # output = F.scaled_dot_product_attention(q, k, v, mask.unsqueeze(1))
 
-        output = attention(q, k, v, self.d_k, mask, self.dropout)
+        output, scores = attention(q, k, v, self.d_k, mask, self.dropout)
         # concatenate heads and put through final linear layer
         concat = output.transpose(1, 2).contiguous().view(bs, -1, self.d_model)
         output = self.out(concat)
-        return output
+        return output, scores
 
 
 class EncoderLayer(nn.Module):
@@ -94,10 +94,12 @@ class EncoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, self_mask, gen_mask):
-        # assert (gen_mask.max() == 1 and gen_mask.min() == 0), f"{gen_mask.max()}, {gen_mask.min()}"
+        assert (gen_mask.max() == 1 and gen_mask.min() == 0), f"{gen_mask.max()}, {gen_mask.min()}"
         x2 = self.norm_1(x)
-        x = x + self.dropout(self.self_attn(x2, x2, x2, self_mask)) \
-                + self.dropout(self.gen_attn(x2, x2, x2, gen_mask))
+
+        self_attn_out, self_scores = self.self_attn(x2, x2, x2, self_mask)
+        gen_attn_out, gen_scores = self.gen_attn(x2, x2, x2, gen_mask)
+        x = x + self.dropout(self_attn_out) + self.dropout(gen_attn_out)
         x2 = self.norm_2(x)
         x = x + self.dropout(self.ff(x2))
-        return x
+        return x, self_scores, gen_scores

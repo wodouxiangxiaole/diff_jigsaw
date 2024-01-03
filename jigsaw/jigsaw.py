@@ -11,6 +11,7 @@ from jigsaw.evaluation.jigsaw_evaluator import (
     trans_metrics,
     randn_tensor,
     rot_metrics,
+    attention_visualize
 )
 import numpy as np
 import os
@@ -121,7 +122,7 @@ class Jigsaw3D(pl.LightningModule):
         latent = data_dict["latent"]
         xyz = data_dict["xyz"]
 
-        pred_noise = self.diffusion(
+        pred_noise, self_score, gen_score = self.diffusion(
             gt_trans,
             noisy_rots, 
             timesteps, 
@@ -200,7 +201,7 @@ class Jigsaw3D(pl.LightningModule):
             latent = data_dict["latent"]
             xyz = data_dict["xyz"]
 
-            pred_noise = self.diffusion(
+            pred_noise, self_scores, gen_scores = self.diffusion(
                 gt_trans,
                 noisy_rots, 
                 timesteps, 
@@ -217,6 +218,11 @@ class Jigsaw3D(pl.LightningModule):
             if self.cfg.model.ref_part:
                 noisy_rots[torch.arange(B), ref_part] = gt_rots[torch.arange(B), ref_part]   
 
+            
+            if t == 0:
+                attention_visualize(self_scores, gen_scores, data_dict["part_valids"], '.')
+
+            
             # all_pred_trans_rots.append(None)
             
 

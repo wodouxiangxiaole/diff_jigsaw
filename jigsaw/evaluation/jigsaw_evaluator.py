@@ -5,6 +5,7 @@ from jigsaw.evaluation.transform import (
 )
 from jigsaw.evaluation.loss import _valid_mean
 from typing import List, Optional, Tuple, Union
+import matplotlib.pyplot as plt
 
 
 
@@ -140,4 +141,18 @@ def randn_tensor(
 
     return transformations
 
-        
+
+def attention_visualize(self_scores, gen_scores, part_valids, save_dir):
+    self_scores = self_scores[0][0]
+    gen_scores = gen_scores[0]
+    valids = torch.count_nonzero(part_valids)
+    valids = valids * 27
+
+    for i in range(gen_scores.shape[0]):
+        head_gen_scores = gen_scores[i]
+
+        head_gen_scores = head_gen_scores[:valids, : valids]
+        vmin = torch.min(head_gen_scores)
+        vmax = torch.max(head_gen_scores)
+        plt.matshow(head_gen_scores.detach().cpu().numpy(), vmin=vmin, vmax=vmax)
+        plt.savefig(f'{save_dir}/gen_scores{i}.png')

@@ -122,7 +122,7 @@ class DiffModel(nn.Module):
         trans_emb = self.trans_emb(trans_param).unsqueeze(1).repeat(1, L, 1) # (B*N, L, C_trans)
         rot_emb = self.rots_emb(rot_param).unsqueeze(1).repeat(1, L, 1) # (B*N, L, C_rot)
         scale = scale.flatten(0, 1)  # (B*N, 1)
-        scale_emb = self.scale_embedding(scale).unsqueeze(1).repeat(1, L, 1) # (B*N, 1, C)
+        scale_emb = self.scale_embedding(scale).unsqueeze(1).repeat(1, L, 1) # (B*N, L, C_scale)
         
         # Generate shape embedding [B*N, L, C_latent + C_scale + C_rot + C_trans]
         latent = latent.flatten(0, 1)  # (B*N, L, 64)
@@ -193,10 +193,10 @@ class DiffModel(nn.Module):
                     pos_emb.reshape(B, N*L, -1) + time_emb 
 
         for layer in self.transformer_layers:
-            data_emb = layer(data_emb, self_mask, gen_mask)
+            data_emb, self_score, gen_score = layer(data_emb, self_mask, gen_mask)
 
         # data_emb (B, N*L, C)
         out_dec = self._out(data_emb, B, N, L)
 
-        return out_dec
+        return out_dec, self_score, gen_score
 
