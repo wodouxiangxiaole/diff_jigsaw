@@ -48,7 +48,10 @@ class GeometryLatentDataset(Dataset):
             num_parts = data_dict["num_parts"].item()
             mesh_file_path = data_dict['mesh_file_path'].item()
             part_pcs = data_dict['part_pcs']
-            scale = data_dict['scale']
+            if len(data_dict['scale'].shape) == 3:
+                scale = data_dict['scale'].squeeze(1)
+            else:
+                scale = data_dict['scale']
             part_rots = data_dict["gt_quats"]
 
             if cfg.model.ref_part:

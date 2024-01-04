@@ -1,9 +1,12 @@
-
 python train.py \
-    experiment_name=exp2_train_all \
+    experiment_name=train_all_rot_only_pred_x0 \
     model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2 \
-    data.batch_size=16 \
-    data.val_batch_size=16 \
-    +trainer.devices=3 \
-    +trainer.strategy=ddp_find_unused_parameters_true
+    model.ref_part=True \
+    model.PREDICT_TYPE=sample \
+    data.batch_size=40 \
+    data.val_batch_size=40 \
+    model.PREDICT_TYPE=sample \
+    +trainer.devices=2 \
+    +trainer.strategy=ddp 
+
     
