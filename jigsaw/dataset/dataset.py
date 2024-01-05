@@ -15,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 # from pytorch3d import transforms
 from scipy.spatial.transform import Rotation as R
+import random
 
 
 class GeometryLatentDataset(Dataset):
@@ -40,24 +41,30 @@ class GeometryLatentDataset(Dataset):
         self.data_list = []
 
         for file_name in tqdm(self.data_files):
+
             data_dict = np.load(os.path.join(self.data_dir, file_name))
-            latent = data_dict['latent']
-            data_id = data_dict['data_id'].item()
-            part_valids = data_dict['part_valids']
-            part_trans = data_dict['part_trans']
-            xyz = data_dict['xyz']
+
             num_parts = data_dict["num_parts"].item()
+
+            order = np.arange(self.max_num_part)
+            
+            # Shuffle only the first num_parts elements
+            partial_shuffle = order[:num_parts]
+            random.shuffle(partial_shuffle)
+            order[:num_parts] = partial_shuffle
+
+            latent = data_dict['latent'][order]
+            data_id = data_dict['data_id'].item()
+            part_valids = data_dict['part_valids'][order]
+            part_trans = data_dict['part_trans'][order]
+            xyz = data_dict['xyz'][order]
             mesh_file_path = data_dict['mesh_file_path'].item()
-            part_pcs = data_dict['part_pcs']
-            scale = data_dict['scale']
-            part_rots = data_dict["gt_quats"]
+            part_pcs = data_dict['part_pcs'][order]
+            scale = data_dict['scale'][order]
+            part_rots = data_dict["gt_quats"][order]
 
             if cfg.model.ref_part:
-                # make every ref part gt translation to 0
-                # every part translation is relative to ref part
-                # lead to less ambiguity 
                 ref_part = np.argmax(scale[:num_parts])
-
             else:
                 ref_part = -1
 

@@ -44,7 +44,7 @@
             "args": [
                 "experiment_name=train_all_bs24_4gpu_5000iters_fixed_encoder_add_ref_part",
                 "model.DDPM_BETA_SCHEDULE=squaredcos_cap_v2",
-                "inference_dir=test_results",
+                "inference_dir=test_shuffle",
                 "ckpt_path=output/train_all_bs24_4gpu_5000iters_fixed_encoder_add_ref_part/training/last.ckpt",
                 "model.num_inference_steps=100",
                 "data.val_batch_size=6",
