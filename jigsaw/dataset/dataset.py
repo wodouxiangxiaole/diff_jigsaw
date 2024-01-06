@@ -15,7 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 # from pytorch3d import transforms
 from scipy.spatial.transform import Rotation as R
-
+import copy
 
 class GeometryLatentDataset(Dataset):
     def __init__(
@@ -108,7 +108,7 @@ class GeometryLatentDataset(Dataset):
     def __getitem__(self, idx):
         
         if self.cfg.data.rot_in_getitem:
-            data_dict = self.data_list[idx]
+            data_dict = copy.deepcopy(self.data_list[idx])
             num_parts = data_dict['num_parts']
             cur_quat, cur_pts = [], []
 
@@ -176,7 +176,7 @@ def build_test_dataloader(cfg):
     val_set = GeometryLatentDataset(**data_dict)
     val_loader = DataLoader(
         dataset=val_set,
-        batch_size=cfg.data.batch_size,
+        batch_size=cfg.data.val_batch_size,
         shuffle=False,
         num_workers=cfg.data.num_workers,
         pin_memory=True,

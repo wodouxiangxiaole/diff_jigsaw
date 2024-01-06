@@ -168,7 +168,7 @@ class DiffModel(nn.Module):
         return shape_emb.reshape(B*N, L, self.model_channels)
 
 
-    def forward(self, x, timesteps, latent, xyz, part_valids, scale, ref_part):
+    def forward(self, trans, rots, timesteps, latent, xyz, part_valids, scale, ref_part):
         """
         Latent already transform
 
@@ -182,6 +182,8 @@ class DiffModel(nn.Module):
         """
 
         B, N, L, _ = latent.shape
+        
+        x = torch.cat([trans, rots], dim=-1)
 
         shape_emb, pos_emb, time_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
         self_mask, gen_mask = self._gen_mask(L, N, B, part_valids)

@@ -35,7 +35,6 @@ class Jigsaw3D(pl.LightningModule):
                     prediction_type=cfg.model.PREDICT_TYPE,
                     beta_start=cfg.model.BETA_START,
                     beta_end=cfg.model.BETA_END,
-                    clip_sample=False,
                 )
             else: 
                 self.noise_scheduler = CustomDDPMScheduler(
@@ -44,7 +43,6 @@ class Jigsaw3D(pl.LightningModule):
                     prediction_type=cfg.model.PREDICT_TYPE,
                     beta_start=cfg.model.BETA_START,
                     beta_end=cfg.model.BETA_END,
-                    clip_sample=False,
                     timestep_spacing=self.cfg.model.timestep_spacing
                 )
         elif cfg.model.scheduler == "ddim":
@@ -54,7 +52,6 @@ class Jigsaw3D(pl.LightningModule):
                 prediction_type=cfg.model.PREDICT_TYPE,
                 beta_start=cfg.model.BETA_START,
                 beta_end=cfg.model.BETA_END,
-                clip_sample=False,
             )
         else:
             raise NotImplementedError
@@ -226,16 +223,14 @@ class Jigsaw3D(pl.LightningModule):
         self.acc_list.append(torch.mean(acc))
         self.rmse_r_list.append(torch.mean(rmse_r))
         self.rmse_t_list.append(torch.mean(rmse_t))
+        return np.stack(all_pred_trans_rots, axis=0), acc
 
 
     def validation_step(self, data_dict, idx):
 
         self._calc_val_loss(data_dict)
 
-        self._calc_metrics(data_dict)
-        
-
-        return np.stack(all_pred_trans_rots, axis=0), acc
+        return self._calc_metrics(data_dict)
     
 
     def on_validation_epoch_end(self):
