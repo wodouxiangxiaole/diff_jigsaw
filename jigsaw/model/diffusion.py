@@ -7,6 +7,31 @@ from jigsaw.model.model_utils import (
     EmbedderNerf
 )
 from jigsaw.model.transformer import EncoderLayer
+import numpy as np
+
+
+def weight_init(shape, mode, fan_in, fan_out):
+    if mode == 'xavier_uniform': return np.sqrt(6 / (fan_in + fan_out)) * (torch.rand(*shape) * 2 - 1)
+    if mode == 'xavier_normal':  return np.sqrt(2 / (fan_in + fan_out)) * torch.randn(*shape)
+    if mode == 'kaiming_uniform': return np.sqrt(3 / fan_in) * (torch.rand(*shape) * 2 - 1)
+    if mode == 'kaiming_normal':  return np.sqrt(1 / fan_in) * torch.randn(*shape)
+    raise ValueError(f'Invalid init mode "{mode}"')
+
+
+class Linear(torch.nn.Module):
+    def __init__(self, in_features, out_features, bias=True, init_mode='kaiming_normal', init_weight=1, init_bias=0):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        init_kwargs = dict(mode=init_mode, fan_in=in_features, fan_out=out_features)
+        self.weight = torch.nn.Parameter(weight_init([out_features, in_features], **init_kwargs) * init_weight)
+        self.bias = torch.nn.Parameter(weight_init([out_features], **init_kwargs) * init_bias) if bias else None
+
+    def forward(self, x):
+        x = x @ self.weight.to(x.dtype).t()
+        if self.bias is not None:
+            x = x.add_(self.bias.to(x.dtype))
+        return x
 
 
 class DiffModel(nn.Module):
@@ -19,9 +44,9 @@ class DiffModel(nn.Module):
         self.cfg = cfg
 
         self.model_channels = cfg.model.embed_dim
-        self.out_channels = cfg.model.out_channels
         self.num_layers = cfg.model.num_layers
         self.num_heads = cfg.model.num_heads
+        pose_dim = self.cfg.model.pose_dim
 
         if cfg.model.ref_part:
             self.ref_part_emb = nn.Embedding(2, cfg.model.embed_dim)
@@ -37,22 +62,6 @@ class DiffModel(nn.Module):
         )
 
         multires = 10
-        embed_kwargs = {
-            'include_input': True,
-            'input_dims': 3,
-            'max_freq_log2': multires - 1,
-            'num_freqs': multires,
-            'log_sampling': True,
-            'periodic_fns': [torch.sin, torch.cos],
-        }
-        
-        embedder_trans = EmbedderNerf(**embed_kwargs)
-        self.trans_emb = lambda x, eo=embedder_trans: eo.embed(x)
-
-        embed_kwargs['input_dims'] = 4
-        embedder_rots = EmbedderNerf(**embed_kwargs)
-        self.rots_emb = lambda x, eo=embedder_rots: eo.embed(x)
-
 
         embed_pos_kwargs = {
             'include_input': True,
@@ -78,21 +87,28 @@ class DiffModel(nn.Module):
         self.scale_embedding = lambda x, eo=embedder_scale: eo.embed(x)
 
         self.shape_embedding = nn.Linear(
-            cfg.model.num_dim + embedder_scale.out_dim + embedder_rots.out_dim + embedder_trans.out_dim, 
+            cfg.model.num_dim + embedder_scale.out_dim, 
             self.model_channels
         )
 
         self.pos_fc = nn.Linear(
-            embedder_pos.out_dim + embedder_scale.out_dim + embedder_rots.out_dim + embedder_trans.out_dim,
+            embedder_pos.out_dim + embedder_scale.out_dim,
             self.model_channels
         )
-
-        # Pos encoding for indicating the sequence. which part is for the reference
-        self.pos_encoding = PositionalEncoding(self.model_channels)
-
-        self.output_linear1 = nn.Linear(self.model_channels, self.model_channels)
-        self.output_linear2 = nn.Linear(self.model_channels, self.model_channels // 2)
-        self.output_linear3 = nn.Linear(self.model_channels // 2, self.out_channels)
+        
+        self.pose_fc = nn.Sequential(
+            nn.Linear(pose_dim, self.model_channels),
+            self.activation,
+            nn.Linear(self.model_channels, self.model_channels),
+            self.activation,
+        )
+        
+        init_zero = dict(init_mode='kaiming_uniform', init_weight=0, init_bias=0) # init the final output layer's weights to zeros
+        self.fusion_tail = nn.Sequential(
+            nn.Linear(self.model_channels, 512),
+            self.activation,
+            Linear(512, pose_dim, **init_zero),
+        )
     
 
     def _gen_mask(self, L, N, B, mask):
@@ -116,41 +132,35 @@ class DiffModel(nn.Module):
         """
         B, N, L, _ = latent.shape
 
-        x = x.flatten(0, 1)  # (B*N, 7)
-        trans_param = x[..., :3]
-        rot_param = x[..., 3:]
+        x = x.flatten(0, 1)  # (B*N, 9)
+        param_emb = self.pose_fc(x)
 
-        trans_emb = self.trans_emb(trans_param).unsqueeze(1).repeat(1, L, 1) # (B*N, L, C_trans)
-        rot_emb = self.rots_emb(rot_param).unsqueeze(1).repeat(1, L, 1) # (B*N, L, C_rot)
         scale = scale.flatten(0, 1)  # (B*N, 1)
         scale_emb = self.scale_embedding(scale).unsqueeze(1).repeat(1, L, 1) # (B*N, 1, C)
         
         # Generate shape embedding [B*N, L, C_latent + C_scale + C_rot + C_trans]
         latent = latent.flatten(0, 1)  # (B*N, L, 64)
-        latent = torch.cat((latent, scale_emb, rot_emb, trans_emb), dim=2) # (B*N, L, C)
+        latent = torch.cat((latent, scale_emb), dim=-1) # (B*N, L, C)
         shape_emb = self.shape_embedding(latent)
 
         # Generate position embedding [B*N, L, C_pos + C_scale + C_rot + C_trans]
         xyz = xyz.flatten(0, 1)  # (B*N, L, 3)
         xyz_pos_emb = self.pos_embedding(xyz)
-        xyz_pos_emb = torch.cat((xyz_pos_emb, scale_emb, rot_emb, trans_emb), dim=2)
+        xyz_pos_emb = torch.cat((xyz_pos_emb, scale_emb), dim=-1)
         xyz_pos_emb = self.pos_fc(xyz_pos_emb)
 
         # Generate time embedding [B, N, C]
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         time_emb = time_emb.unsqueeze(1)
 
-        return shape_emb, xyz_pos_emb, time_emb
+        return shape_emb, xyz_pos_emb, time_emb, param_emb
 
 
     def _out(self, data_emb, B, N, L):
         out = data_emb.reshape(B, N, L, self.model_channels)
         # Avg pooling
         out = out.mean(dim=2)
-        out_dec = self.output_linear1(out)
-        out_dec = self.activation(out_dec)
-        out_dec = self.output_linear2(out_dec)
-        out_dec = self.output_linear3(out_dec)
+        out_dec = self.fusion_tail(out)
         return out_dec
 
 
@@ -168,12 +178,10 @@ class DiffModel(nn.Module):
         return shape_emb.reshape(B*N, L, self.model_channels)
 
 
-    def forward(self, trans, rots, timesteps, latent, xyz, part_valids, scale, ref_part):
+    def forward(self, x, timesteps, latent, xyz, part_valids, scale, ref_part):
         """
-        Latent already transform
-
         forward pass 
-        x : (B, N, 3)
+        x : (B, N, 9)
         timesteps : (B, 1)
         latent : (B, N, L, 4)
         xyz : (B, N, L, 3)
@@ -182,18 +190,18 @@ class DiffModel(nn.Module):
         """
 
         B, N, L, _ = latent.shape
-        
-        x = torch.cat([trans, rots], dim=-1)
 
-        shape_emb, pos_emb, time_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
+        shape_emb, pos_emb, time_emb, param_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
         self_mask, gen_mask = self._gen_mask(L, N, B, part_valids)
-
+        param_emb = param_emb.reshape(B, N, -1).unsqueeze(2).repeat(1, 1, L, 1)
         if self.cfg.model.ref_part:
             shape_emb = self._add_ref_part_emb(B, N, L, shape_emb, ref_part)
 
         data_emb = shape_emb.reshape(B, N*L, -1) + \
-                    pos_emb.reshape(B, N*L, -1) + time_emb 
-
+                    pos_emb.reshape(B, N*L, -1) + time_emb + \
+                    param_emb.reshape(B, N*L, -1)
+        
+        
         for layer in self.transformer_layers:
             data_emb = layer(data_emb, self_mask, gen_mask)
 

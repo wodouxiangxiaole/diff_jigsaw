@@ -53,6 +53,11 @@ class GeometryLatentDataset(Dataset):
             scale = data_dict['scale']
             part_rots = data_dict["gt_quats"]
 
+            if part_rots.shape[-1] != 4:
+                part_rots = np.zeros((self.max_num_part, 4))
+                # import pdb; pdb.set_trace()
+            part_rots[num_parts:] = [1, 0, 0, 0]
+
             if cfg.model.ref_part:
                 # make every ref part gt translation to 0
                 # every part translation is relative to ref part
@@ -99,7 +104,22 @@ class GeometryLatentDataset(Dataset):
         pad_data = np.zeros(pad_shape, dtype=np.float32)
         pad_data[:data.shape[0]] = data
         return pad_data
+    
+    
+    # def _pad_quat(self, data):
+    #     """Pad data to shape [self.max_num_part, data.shape[1], ...].
+    #     For quaternion data, pad with [1, 0, 0, 0].
+    #     """
+    #     data = np.array(data)
+    #     pad_shape = (self.max_num_part, ) + tuple(data.shape[1:])
+    #     pad_data = np.zeros(pad_shape, dtype=np.float32)
 
+    #     # Check if the data is quaternion data (shape[-1] == 4)
+    #     if data.shape[-1] == 4:
+    #         pad_data = pad_data + np.array([1, 0, 0, 0])
+
+    #     pad_data[:data.shape[0]] = data
+    #     return pad_data
 
     def __len__(self):
         return len(self.data_list)
@@ -119,6 +139,7 @@ class GeometryLatentDataset(Dataset):
 
             cur_pts = self._pad_data(np.stack(cur_pts, axis=0))  # [P, N, 3]
             cur_quat = self._pad_data(np.stack(cur_quat, axis=0))  # [P, 4]
+            cur_quat[num_parts:] = [1, 0, 0, 0]
             
             data_dict['part_pcs'] = cur_pts
             data_dict['part_rots'] = cur_quat

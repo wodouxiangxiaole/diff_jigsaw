@@ -112,3 +112,18 @@ def get_batch_length_from_part_points(n_pcs, n_valids=None, part_valids=None):
     batch_length = torch.cat(batch_length_list)
     assert batch_length.shape[0] == torch.sum(n_valids)
     return batch_length
+
+
+from pytorch3d import transforms
+
+def quat_to_6d(quat):
+    """
+    :param quat: [..., 4]
+    :return: [..., 6]
+    """
+    assert quat.shape[-1] == 4
+    rot_matrix = transforms.quaternion_to_matrix(quat)
+    
+    d6 = transforms.matrix_to_rotation_6d(rot_matrix)
+
+    return d6

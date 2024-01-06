@@ -5,7 +5,7 @@ from jigsaw.evaluation.transform import (
 )
 from jigsaw.evaluation.loss import _valid_mean
 from typing import List, Optional, Tuple, Union
-
+from pytorch3d import transforms
 
 
 def trans_metrics(trans1, trans2, valids, metric):
@@ -49,8 +49,16 @@ def rot_metrics(rot1, rot2, valids, metric):
         [B], metric per data in the batch
     """
     assert metric in ['mse', 'rmse', 'mae']
-    deg1 = quaternion_to_euler(rot1, to_degree=True)  # [B, P, 3]
-    deg2 = quaternion_to_euler(rot2, to_degree=True)
+
+    if rot1.shape[-1] == 4:
+        deg1 = quaternion_to_euler(rot1, to_degree=True)  # [B, P, 3]
+        deg2 = quaternion_to_euler(rot2, to_degree=True)
+    elif rot1.shape[-1] == 6:
+        rot_mat1 = transforms.rotation_6d_to_matrix(rot1)
+        rot_mat2 = transforms.rotation_6d_to_matrix(rot2)
+        deg1 = torch.rad2deg(transforms.matrix_to_euler_angles(rot_mat1, "XYZ"))
+        deg2 = torch.rad2deg(transforms.matrix_to_euler_angles(rot_mat2, "XYZ"))
+
 
     diff1 = (deg1 - deg2).abs()
     diff2 = 360. - (deg1 - deg2).abs()
@@ -85,6 +93,10 @@ def calc_part_acc(pts, trans1, trans2, rot1, rot2, valids, chamfer_distance):
         [B], accuracy per data in the batch
     """
     B, P = pts.shape[:2]
+
+    if rot1.shape[-1] == 6:
+        rot1 = transforms.rotation_6d_to_matrix(rot1)
+        rot2 = transforms.rotation_6d_to_matrix(rot2)
 
     pts1 = transform_pc(trans1, rot1, pts)  # [B, P, N, 3]
     pts2 = transform_pc(trans2, rot2, pts)

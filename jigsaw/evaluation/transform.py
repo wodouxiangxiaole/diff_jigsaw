@@ -40,14 +40,61 @@ def qtransform(t, q, v):
     return tqv
 
 
-def transform_pc(trans, rot, pc, rot_type=None):
+
+def rmat_rot(r, v):
+    """
+    Rotate vector(s) v about the rotation described by rmat(s) r.
+    Expects a tensor of shape (*, 3, 3) for r and a tensor of
+        shape (*, 3) for v, where * denotes any number of dimensions.
+    Returns a tensor of shape (*, 3).
+    """
+    assert r.shape[-1] == r.shape[-2] == 3
+    assert v.shape[-1] == 3
+
+    # repeat to e.g. apply the same quat for all points in a point cloud
+    if len(r.shape) == len(v.shape):
+        r = r.unsqueeze(-3).repeat_interleave(v.shape[-2], dim=-3)
+
+    assert r.shape[:-2] == v.shape[:-1]
+
+    rv = (r @ v.unsqueeze(-1)).squeeze(-1)
+    return rv
+
+
+
+def rmat_transform(t, r, v):
+    """
+    Rotate vector(s) v about the rotation described by rmat(s) r,
+        and then translate it by the translation described by t.
+    Expects a tensor of shape (*, 3) for t, a tensor of shape (*, 3, 3) for q
+        and a tensor of shape (*, 3) for v, where * denotes any dimensions.
+    Returns a tensor of shape (*, 3).
+    """
+    assert t.shape[-1] == 3
+
+    # repeat to e.g. apply the same trans for all points in a point cloud
+    if len(t.shape) == len(v.shape) - 1:
+        t = t.unsqueeze(-2).repeat_interleave(v.shape[-2], dim=-2)
+
+    assert t.shape == v.shape
+
+    rv = rmat_rot(r, v)
+    trv = rv + t
+    return trv
+
+
+def transform_pc(trans, rot, pc, rot_type="rmat"):
     """Rotate and translate the 3D point cloud.
 
     Args:
         rot (torch.Tensor): quat
     """
-    
-    return qtransform(trans, rot, pc)
+    if rot_type == 'quat':
+        return qtransform(trans, rot, pc)
+    elif rot_type == 'rmat':
+        return rmat_transform(trans, rot, pc)
+    else:
+        raise NotImplementedError(f'{rot_type} is not supported')
 
 
 def quaternion_to_euler(quat, to_degree=True):
