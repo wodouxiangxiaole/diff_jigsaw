@@ -87,12 +87,7 @@ class DiffModel(nn.Module):
         self.scale_embedding = lambda x, eo=embedder_scale: eo.embed(x)
 
         self.shape_embedding = nn.Linear(
-            cfg.model.num_dim + embedder_scale.out_dim, 
-            self.model_channels
-        )
-
-        self.pos_fc = nn.Linear(
-            embedder_pos.out_dim + embedder_scale.out_dim,
+            cfg.model.num_dim + embedder_scale.out_dim + embedder_pos.out_dim, 
             self.model_channels
         )
         
@@ -137,23 +132,21 @@ class DiffModel(nn.Module):
 
         scale = scale.flatten(0, 1)  # (B*N, 1)
         scale_emb = self.scale_embedding(scale).unsqueeze(1).repeat(1, L, 1) # (B*N, 1, C)
-        
-        # Generate shape embedding [B*N, L, C_latent + C_scale]
-        latent = latent.flatten(0, 1)  # (B*N, L, 64)
-        latent = torch.cat((latent, scale_emb), dim=-1) # (B*N, L, C)
-        shape_emb = self.shape_embedding(latent)
 
         # Generate position embedding [B*N, L, C_pos + C_scale]
         xyz = xyz.flatten(0, 1)  # (B*N, L, 3)
         xyz_pos_emb = self.pos_embedding(xyz)
-        xyz_pos_emb = torch.cat((xyz_pos_emb, scale_emb), dim=-1)
-        xyz_pos_emb = self.pos_fc(xyz_pos_emb)
+        
+        # Generate shape embedding [B*N, L, C_latent + C_scale]
+        latent = latent.flatten(0, 1)  # (B*N, L, 64)
+        latent = torch.cat((latent, xyz_pos_emb, scale_emb), dim=-1) # (B*N, L, C)
+        shape_emb = self.shape_embedding(latent)
 
         # Generate time embedding [B, N, C]
         time_emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         time_emb = time_emb.unsqueeze(1)
 
-        return shape_emb, xyz_pos_emb, time_emb, param_emb
+        return shape_emb, time_emb, param_emb
 
 
     def _out(self, data_emb, B, N, L):
@@ -191,19 +184,19 @@ class DiffModel(nn.Module):
 
         B, N, L, _ = latent.shape
 
-        shape_emb, pos_emb, time_emb, param_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
+        shape_emb, time_emb, param_emb = self._gen_cond(timesteps, x, xyz, latent, scale)
         self_mask, gen_mask = self._gen_mask(L, N, B, part_valids)
         param_emb = param_emb.reshape(B, N, -1).unsqueeze(2).repeat(1, 1, L, 1)
         if self.cfg.model.ref_part:
             shape_emb = self._add_ref_part_emb(B, N, L, shape_emb, ref_part)
 
-        data_emb = shape_emb.reshape(B, N*L, -1) + \
-                    pos_emb.reshape(B, N*L, -1) + time_emb + \
-                    param_emb.reshape(B, N*L, -1)
+        data_emb = shape_emb.reshape(B, N*L, -1) + param_emb.reshape(B, N*L, -1)
         
         
         for layer in self.transformer_layers:
+            data_emb += time_emb
             data_emb = layer(data_emb, self_mask, gen_mask)
+            
 
         # data_emb (B, N*L, C)
         out_dec = self._out(data_emb, B, N, L)
