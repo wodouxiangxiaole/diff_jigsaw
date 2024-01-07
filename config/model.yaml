@@ -39,5 +39,5 @@ model:
 
   lr_scheduler:
     _target_: torch.optim.lr_scheduler.MultiStepLR
-    milestones: [1200, 1700]
+    milestones: [2400, 3600]
     gamma: 0.05

@@ -138,12 +138,12 @@ class DiffModel(nn.Module):
         scale = scale.flatten(0, 1)  # (B*N, 1)
         scale_emb = self.scale_embedding(scale).unsqueeze(1).repeat(1, L, 1) # (B*N, 1, C)
         
-        # Generate shape embedding [B*N, L, C_latent + C_scale + C_rot + C_trans]
+        # Generate shape embedding [B*N, L, C_latent + C_scale]
         latent = latent.flatten(0, 1)  # (B*N, L, 64)
         latent = torch.cat((latent, scale_emb), dim=-1) # (B*N, L, C)
         shape_emb = self.shape_embedding(latent)
 
-        # Generate position embedding [B*N, L, C_pos + C_scale + C_rot + C_trans]
+        # Generate position embedding [B*N, L, C_pos + C_scale]
         xyz = xyz.flatten(0, 1)  # (B*N, L, 3)
         xyz_pos_emb = self.pos_embedding(xyz)
         xyz_pos_emb = torch.cat((xyz_pos_emb, scale_emb), dim=-1)
